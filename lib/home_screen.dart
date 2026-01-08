@@ -3,13 +3,17 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:agri_chain/services/tflite_service.dart';
+import 'package:agri_chain/providers/alerts_provider.dart';
+import 'package:agri_chain/providers/fields_provider.dart';
+import 'package:agri_chain/providers/scan_provider.dart';
 import 'package:agri_chain/screens/camera_screen.dart';
 import 'package:agri_chain/screens/results_screen.dart';
 import 'package:agri_chain/widgets/disease_card.dart';
 import 'package:agri_chain/widgets/scan_button.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final bool embedded;
+  const HomeScreen({super.key, this.embedded = false});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -18,6 +22,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late TFLiteService _tfliteService;
   bool _isLoading = false;
+
+  String _formatConfidence(dynamic confidence) {
+    final asDouble = confidence is num ? confidence.toDouble() : double.tryParse('$confidence');
+    if (asDouble == null) return '—';
+    final pct = asDouble <= 1.0 ? (asDouble * 100.0) : asDouble;
+    return '${pct.toStringAsFixed(1)}%';
+  }
 
   @override
   void initState() {
@@ -60,6 +71,52 @@ class _HomeScreenState extends State<HomeScreen> {
       final result = await _tfliteService.predictImage(imageFile);
       
       if (result['success'] == true) {
+        final selectedFieldId = context.read<ScanProvider>().selectedFieldId;
+        try {
+          final predictions = (result['predictions'] as List).cast<Map<String, dynamic>>();
+          if (predictions.isNotEmpty) {
+            final top = predictions.first;
+            final label = (top['label'] as String?) ?? 'Unknown';
+            final confidence = top['confidence'];
+            final lower = label.toLowerCase();
+            final topPct = (confidence is num)
+                ? (confidence.toDouble() <= 1.0 ? confidence.toDouble() * 100.0 : confidence.toDouble())
+                : (double.tryParse('$confidence') ?? 0.0);
+
+            final severity = lower.contains('healthy')
+                ? 'Low'
+                : (topPct >= 90.0 ? 'Critical' : (topPct >= 70.0 ? 'High' : 'Medium'));
+
+            final top3 = predictions.take(3).map((p) {
+              final pLabel = (p['label'] as String?) ?? 'Unknown';
+              return {
+                'label': pLabel,
+                'confidence': p['confidence'],
+                'confidenceText': _formatConfidence(p['confidence']),
+              };
+            }).toList();
+
+            await context.read<AlertsProvider>().addAlert(
+                  AlertItem(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    title: 'AI Health Alert: $label',
+                    message: 'Diagnosis result: $label (confidence: ${_formatConfidence(confidence)}).',
+                    category: 'Health',
+                    severity: severity,
+                    createdAt: DateTime.now(),
+                    fieldId: selectedFieldId,
+                    imagePath: imageFile.path,
+                    extra: {
+                      'top': top,
+                      'top3': top3,
+                    },
+                  ),
+                );
+          }
+        } catch (_) {
+          // Ignore alert creation failures
+        }
+
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -67,6 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
               imageFile: imageFile,
               predictions: result['predictions'],
               inferenceTime: result['inferenceTime'],
+              selectedFieldId: selectedFieldId,
             ),
           ),
         );
@@ -91,40 +149,97 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              _buildHeader(),
-              const SizedBox(height: 32),
-              
-              // Scan Button
-              Center(
-                child: ScanButton(
-                  onCameraPressed: _takePhoto,
-                  onGalleryPressed: _pickImageFromGallery,
-                  isLoading: _isLoading,
-                ),
+    final fields = context.watch<FieldsProvider>().fields;
+    final selectedFieldId = context.watch<ScanProvider>().selectedFieldId;
+    final selectedExists = selectedFieldId == null ? true : fields.any((f) => f.id == selectedFieldId);
+    final effectiveSelectedFieldId = selectedExists ? selectedFieldId : null;
+
+    final content = SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            // Header
+            _buildHeader(),
+            const SizedBox(height: 32),
+
+            FutureBuilder<void>(
+              future: Future.wait([
+                context.read<FieldsProvider>().ensureLoaded(),
+                context.read<ScanProvider>().ensureLoaded(),
+              ]),
+              builder: (context, snapshot) {
+                if (!selectedExists) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!context.mounted) return;
+                    context.read<ScanProvider>().setSelectedFieldId(null);
+                  });
+                }
+
+                final items = [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('No field selected'),
+                  ),
+                  ...fields.map(
+                    (f) => DropdownMenuItem<String?>(
+                      value: f.id,
+                      child: Text(f.name),
+                    ),
+                  ),
+                ];
+
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.map_outlined),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String?>(
+                            value: effectiveSelectedFieldId,
+                            items: items,
+                            decoration: const InputDecoration(
+                              labelText: 'Selected field (optional)',
+                            ),
+                            onChanged: (value) => context.read<ScanProvider>().setSelectedFieldId(value),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Scan Button
+            Center(
+              child: ScanButton(
+                onCameraPressed: _takePhoto,
+                onGalleryPressed: _pickImageFromGallery,
+                isLoading: _isLoading,
               ),
-              
-              const SizedBox(height: 40),
-              
-              // Disease Info
-              _buildDiseaseInfo(),
-              
-              const Spacer(),
-              
-              // Footer
-              _buildFooter(),
-            ],
-          ),
+            ),
+
+            const SizedBox(height: 40),
+
+            // Disease Info
+            _buildDiseaseInfo(),
+
+            const SizedBox(height: 24),
+
+            // Footer
+            _buildFooter(),
+          ],
         ),
       ),
     );
+
+    if (widget.embedded) return content;
+    return Scaffold(body: content);
   }
 
   Widget _buildHeader() {

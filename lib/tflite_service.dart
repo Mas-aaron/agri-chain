@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:tflite_flutter_helper/tflite_flutter_helper.dart';
 import 'package:image/image.dart' as img;
 
 class TFLiteService {
@@ -33,15 +33,14 @@ class TFLiteService {
         options: options,
       );
       
-      // Load labels
-      final labelData = await DefaultAssetBundle.of(Instance)
-          .loadString(_labelsPath);
+      // Load labels using rootBundle (correct way for assets)
+      final labelData = await rootBundle.loadString(_labelsPath);
       _labels = labelData.split('\n').where((label) => label.isNotEmpty).toList();
       
       // Print model info
       print('✅ Model loaded successfully');
       print('📊 Input shape: ${_interpreter.getInputTensor(0).shape}');
-      print('📈 Output shape: ${_interpreter.getInputTensor(0).shape}');
+      print('📈 Output shape: ${_interpreter.getOutputTensor(0).shape}');
       print('🎯 Classes: $_labels');
       
       _isInitialized = true;
@@ -57,20 +56,16 @@ class TFLiteService {
   
   Future<void> warmUp() async {
     try {
-      // Create dummy input
+      // Create dummy input with proper shape
       final inputShape = _interpreter.getInputTensor(0).shape;
-      final dummyInput = List.generate(
-        inputShape.reduce((a, b) => a * b),
-        (_) => 0.0,
-      ).reshape(inputShape);
+      final totalElements = inputShape.reduce((a, b) => a * b);
+      final dummyInput = Float32List(totalElements);
       
       final outputShape = _interpreter.getOutputTensor(0).shape;
-      final dummyOutput = List.generate(
-        outputShape.reduce((a, b) => a * b),
-        (_) => 0.0,
-      ).reshape(outputShape);
+      final totalOutputElements = outputShape.reduce((a, b) => a * b);
+      final dummyOutput = Float32List(totalOutputElements);
       
-      // Run warm-up inference
+      // Run warm-up inference - no need for buffer access
       _interpreter.run(dummyInput, dummyOutput);
       print('🔥 Model warmed up');
     } catch (e) {
@@ -92,19 +87,22 @@ class TFLiteService {
       final inputShape = _interpreter.getInputTensor(0).shape;
       final outputShape = _interpreter.getOutputTensor(0).shape;
       
-      final inputBuffer = processedImage.buffer.asFloat32List();
-      final inputTensor = inputBuffer.reshape(inputShape);
+      // Ensure input matches expected shape
+      final expectedInputSize = inputShape.reduce((a, b) => a * b);
+      if (processedImage.length != expectedInputSize) {
+        throw Exception('Input size mismatch: expected $expectedInputSize, got ${processedImage.length}');
+      }
       
+      final inputBuffer = Float32List.fromList(processedImage);
       final outputBuffer = Float32List(outputShape.reduce((a, b) => a * b));
-      final outputTensor = outputBuffer.reshape(outputShape);
       
       // Run inference
       final stopwatch = Stopwatch()..start();
-      _interpreter.run(inputTensor, outputTensor);
+      _interpreter.run(inputBuffer, outputBuffer);
       final inferenceTime = stopwatch.elapsedMilliseconds;
       
       // Process results
-      final predictions = outputTensor[0];
+      final predictions = outputBuffer.map((e) => e.toDouble()).toList();
       final results = _processPredictions(predictions, topK);
       
       return {
@@ -124,22 +122,28 @@ class TFLiteService {
   }
   
   List<double> _preprocessImage(img.Image image) {
-    // Resize to model input size (224x224)
+    // Get model input shape
+    final inputShape = _interpreter.getInputTensor(0).shape;
+    final inputHeight = inputShape.length > 1 ? inputShape[1] : 224;
+    final inputWidth = inputShape.length > 2 ? inputShape[2] : 224;
+    
+    // Resize to model input size
     final resized = img.copyResize(
       image,
-      width: 224,
-      height: 224,
+      width: inputWidth,
+      height: inputHeight,
     );
     
     // Convert to float32 array and normalize (0-1)
-    final pixels = resized.getBytes();
-    final floatPixels = List<double>.filled(224 * 224 * 3, 0.0);
-    
-    for (var i = 0; i < pixels.length; i += 3) {
-      final pixelIndex = i ~/ 3;
-      floatPixels[pixelIndex * 3] = pixels[i].toDouble() / 255.0;     // R
-      floatPixels[pixelIndex * 3 + 1] = pixels[i + 1].toDouble() / 255.0; // G
-      floatPixels[pixelIndex * 3 + 2] = pixels[i + 2].toDouble() / 255.0; // B
+    final floatPixels = List<double>.filled(inputHeight * inputWidth * 3, 0.0);
+    int idx = 0;
+    for (int y = 0; y < inputHeight; y++) {
+      for (int x = 0; x < inputWidth; x++) {
+        final px = resized.getPixel(x, y);
+        floatPixels[idx++] = px.r / 255.0; // R
+        floatPixels[idx++] = px.g / 255.0; // G
+        floatPixels[idx++] = px.b / 255.0; // B
+      }
     }
     
     return floatPixels;
@@ -157,7 +161,7 @@ class TFLiteService {
             ? _labels[index] 
             : 'Class $index',
         'confidence': predictions[index],
-        'percentage': (predictions[index] * 100),
+        'percentage': (predictions[index] * 100).toStringAsFixed(2),
         'index': index,
       };
     }).toList();
@@ -167,7 +171,11 @@ class TFLiteService {
   bool get isInitialized => _isInitialized;
   
   void dispose() {
-    _interpreter.close();
+    try {
+      _interpreter.close();
+    } catch (e) {
+      print('⚠️ Error closing interpreter: $e');
+    }
     _isInitialized = false;
   }
 }

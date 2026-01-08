@@ -1,0 +1,1114 @@
+AgriChain Frontend Features Specification
+Design System
+Primary Color Palette: #2E7D32 (Forest Green) as primary, with supporting greens:
+
+Light: #4CAF50
+
+Dark: #1B5E20
+
+Accent: #8BC34A
+
+Secondary Colors: Neutral grays (#F5F5F5, #212121)
+
+Typography: Modern sans-serif (Inter or similar), clean hierarchy
+
+UI Style: Material Design-inspired with rounded corners, subtle shadows, and smooth animations
+
+Responsive Design: Mobile-first approach supporting feature phones to desktop
+
+Core Frontend Features
+1. Authentication & Onboarding Module
+text
+**Screens:**
+- Welcome/Splash Screen
+- Sign Up (Phone/Email)
+- Login
+- Farmer Profile Setup
+- Language Selection (English, Swahili, Luganda)
+- Tutorial/Walkthrough
+
+**Features:**
+- OTP verification for phone numbers
+- Profile completion wizard
+- Offline capability for basic login
+- Biometric authentication (where supported)
+2. Dashboard (Home Screen)
+text
+**Components:**
+- Welcome header with farmer name
+- Quick stats cards:
+  * Active fields
+  * Pending alerts
+  * Current yield forecast
+  * Market price trends
+- Recent activity feed
+- Weather widget (localized)
+- Emergency alert banner
+- Navigation shortcuts
+
+**Features:**
+- Pull-to-refresh
+- Real-time data updates
+- Offline status indicator
+- Customizable widget arrangement
+3. Field Management Module
+text
+**Screens:**
+- Fields List View (grid/list)
+- Field Detail View
+- Add/Edit Field
+- Field Health Timeline
+- Field Map View
+
+**Features:**
+- Field health visualization (color-coded)
+- Photo upload for field documentation
+- GPS boundary marking
+- Soil type and crop information
+- Historical data charts
+- Share field data (QR/export)
+4. AI Insights & Alerts Module
+text
+**Screens:**
+- Alerts Inbox (priority-based)
+- Alert Detail View
+- AI Recommendations
+- Treatment Plans
+- Preventive Measures
+
+**Features:**
+- Push notification integration
+- SMS fallback for critical alerts
+- Alert categorization (Health, Weather, Market)
+- Actionable recommendations
+- Visual symptom gallery
+- Treatment cost estimator
+5. Yield Forecasting Module
+text
+**Screens:**
+- Yield Dashboard
+- Forecast Details
+- Historical Comparison
+- Risk Analysis
+- Quality Metrics
+
+**Features:**
+- Interactive timeline slider
+- Visual yield prediction charts
+- Risk factor indicators
+- Export/share forecasts
+- "What-if" scenario simulator
+6. Marketplace Module
+text
+**Screens:**
+- Marketplace Home
+- Future Harvest Contracts
+- Live Market Prices
+- Buyer Profiles
+- Transaction History
+- Contract Details
+
+**Features:**
+- Live price ticker
+- Contract browsing/filtering
+- Smart contract interaction
+- Escrow status tracking
+- Buyer ratings/reviews
+- Direct messaging
+- QR code for contract verification
+7. Financial Module
+text
+**Screens:**
+- Financial Dashboard
+- Loan Applications
+- Payment History
+- Credit Score View
+- Insurance Options
+
+**Features:**
+- Loan eligibility calculator
+- Repayment schedule visualization
+- Document upload
+- Payment reminders
+- Financial literacy tips
+8. Supply Chain Traceability
+text
+**Screens:**
+- Product Journey Map
+- Quality Certificates
+- Storage Conditions
+- Transport Tracking
+- End Consumer View
+
+**Features:**
+- Interactive timeline
+- QR code scanner/generator
+- Temperature/humidity logs
+- Photo verification points
+- Shareable traceability report
+9. Learning & Support Module
+text
+**Screens:**
+- Video Library
+- Best Practices Guides
+- Community Forum
+- Expert Q&A
+- Government Schemes Info
+- Weather Advisories
+
+**Features:**
+- Offline content download
+- Video tutorials with subtitles
+- Searchable knowledge base
+- Community chat
+- Expert appointment booking
+10. Settings & Profile
+text
+**Screens:**
+- Account Settings
+- Notification Preferences
+- Data & Privacy
+- Language Settings
+- Help & Support
+- About/App Info
+
+**Features:**
+- Dark/light mode toggle
+- Data usage controls
+- Export all data
+- App version/update info
+- Rate/share app
+- Contact support
+Technical Requirements
+1. Performance
+Initial load time < 3 seconds
+
+Smooth 60fps animations
+
+Offline functionality for critical features
+
+Optimized image loading
+
+2. Accessibility
+WCAG 2.1 AA compliance
+
+Screen reader support
+
+High contrast mode
+
+Large text support
+
+Voice command integration
+
+3. Multi-Platform Support
+text
+**Primary:**
+- Progressive Web App (PWA)
+- Android App (HMS Core integration)
+- iOS App
+
+**Fallback:**
+- USSD/SMS interface
+- Feature phone optimized web
+- WhatsApp Business integration
+4. Offline Capabilities
+Cached field data
+
+Draft submission saving
+
+Offline alerts queue
+
+Sync status indicator
+
+Conflict resolution
+
+5. Security Features
+Secure local storage
+
+Encrypted communications
+
+Session management
+
+Permission-based access
+
+Secure biometric storage
+
+Integration Points with Backend
+1. Huawei Cloud Services
+HMS Core for push notifications
+
+Huawei Cloud Storage for media
+
+Location services integration
+
+Analytics and crash reporting
+
+2. Blockchain Integration
+Smart contract interaction UI
+
+Transaction status polling
+
+Wallet management interface
+
+Gas fee estimation
+
+3. AI/ML Integration
+Image upload for diagnosis
+
+Real-time prediction updates
+
+Model confidence indicators
+
+Feedback loop for model improvement
+
+User Flows
+Primary Flow 1: Alert Response
+text
+Field Issue Detected → Push Notification → View Alert Details → 
+View AI Recommendations → Apply Treatment → Log Treatment → 
+Monitor Recovery → System Updates Forecast
+Primary Flow 2: Market Transaction
+text
+Yield Forecast Generated → Create Future Contract → List on Marketplace → 
+Buyer Makes Offer → Negotiate Terms → Smart Contract Execution → 
+Harvest & Delivery → Payment Release → Rate Transaction
+Primary Flow 3: Financial Access
+text
+Check Loan Eligibility → Submit Application → Upload Documents → 
+AI Risk Assessment → Contract Tokenization → Funds Disbursement → 
+Repayment Schedule → Automatic Payments
+Development Priority (Phased Approach)
+Phase 1 (MVP - 6 weeks)
+Authentication & basic profile
+
+Field management
+
+Critical alerts system
+
+Basic dashboard
+
+USSD fallback
+
+Phase 2 (Core - 8 weeks)
+Full marketplace
+
+Yield forecasting
+
+Basic financial features
+
+Offline capabilities
+
+Multi-language support
+
+Phase 3 (Advanced - 10 weeks)
+Advanced analytics
+
+Community features
+
+Supply chain traceability
+
+AI-powered recommendations
+
+Integration with government systems
+
+Success Metrics
+Farmer adoption rate > 60%
+
+Daily active users > 80%
+
+Feature phone accessibility > 95%
+
+User satisfaction rating > 4.5/5
+
+Transaction completion rate > 85%
+
+Note: This specification assumes a React-based frontend with responsive design principles. All features should be tested on low-end Android devices and simulated low-bandwidth conditions to ensure accessibility for target users in rural Africa.
+
+we are using flutter
+AgriChain Flutter Frontend Specification
+Project Architecture
+text
+📱 Flutter 3.x+ (Dart 3.x)
+📁 Clean Architecture with Riverpod/BLoC
+🌍 Multi-language (i18n) Support
+🎨 Design System with Theme Extension
+📊 State Management: Riverpod 2.x
+🔄 API Integration: Dio with Interceptors
+💾 Local Storage: Hive/Isar
+🔒 Security: Flutter Secure Storage
+🗺️ Maps: Mapbox/Google Maps
+📷 Image Processing: image_picker + image_cropper
+📡 Push Notifications: Firebase Cloud Messaging
+📱 HMS Integration: huawei_services (for Huawei devices)
+Design System (Customizable via Theme)
+Color Palette
+dart
+class AgriChainColors {
+  static const Color primary = Color(0xFF2E7D32);
+  static const Color primaryLight = Color(0xFF4CAF50);
+  static const Color primaryDark = Color(0xFF1B5E20);
+  static const Color accent = Color(0xFF8BC34A);
+  static const Color success = Color(0xFF4CAF50);
+  static const Color warning = Color(0xFFFF9800);
+  static const Color error = Color(0xFFF44336);
+  static const Color info = Color(0xFF2196F3);
+  
+  // Neutral colors
+  static const Color background = Color(0xFFF8F9FA);
+  static const Color surface = Color(0xFFFFFFFF);
+  static const Color textPrimary = Color(0xFF212121);
+  static const Color textSecondary = Color(0xFF757575);
+  static const Color divider = Color(0xFFE0E0E0);
+  
+  // Gradient
+  static const Gradient primaryGradient = LinearGradient(
+    colors: [Color(0xFF2E7D32), Color(0xFF4CAF50)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+}
+Typography
+dart
+class AgriChainTypography {
+  static const TextStyle displayLarge = TextStyle(
+    fontSize: 32,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+  );
+  
+  static const TextStyle displayMedium = TextStyle(
+    fontSize: 24,
+    fontWeight: FontWeight.w600,
+    height: 1.3,
+  );
+  
+  static const TextStyle titleLarge = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w600,
+    height: 1.4,
+  );
+  
+  static const TextStyle bodyLarge = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w400,
+    height: 1.5,
+  );
+  
+  static const TextStyle bodyMedium = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    height: 1.4,
+  );
+  
+  static const TextStyle caption = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    height: 1.3,
+  );
+}
+Widget Components Library
+1. Core Components
+dart
+// Reusable widgets
+class AgriButton extends StatelessWidget
+class AgriTextField extends StatelessWidget
+class AgriCard extends StatelessWidget
+class AgriBadge extends StatelessWidget
+class AgriChip extends StatelessWidget
+class AgriProgressIndicator extends StatelessWidget
+class AgriSnackBar extends StatelessWidget
+class AgriDialog extends StatelessWidget
+class AgriBottomSheet extends StatelessWidget
+2. Specialized Components
+dart
+// Agriculture-specific widgets
+class FieldHealthIndicator extends StatelessWidget
+class YieldForecastChart extends StatelessWidget
+class WeatherWidget extends StatelessWidget
+class MarketPriceTicker extends StatelessWidget
+class SmartContractCard extends StatelessWidget
+class AlertBanner extends StatelessWidget
+class OfflineIndicator extends StatelessWidget
+class DataSyncIndicator extends StatelessWidget
+Feature Modules Implementation
+Module 1: Authentication & Onboarding
+dart
+// Screens
+class SplashScreen extends StatefulWidget
+class WelcomeScreen extends StatefulWidget
+class LoginScreen extends StatefulWidget
+class SignUpScreen extends StatefulWidget
+class OTPVerificationScreen extends StatefulWidget
+class ProfileSetupScreen extends StatefulWidget
+class LanguageSelectionScreen extends StatefulWidget
+
+// Features:
+- Phone number validation with country codes
+- OTP auto-verification (SMS retriever)
+- Biometric authentication (fingerprint/face)
+- Profile picture upload with crop
+- Multiple language support
+- Offline-capable signup flow
+- Social login integration (where available)
+Module 2: Dashboard
+dart
+// Screens
+class DashboardScreen extends StatefulWidget
+class DashboardViewModel extends StateNotifier
+
+// Widgets:
+class StatsGrid extends StatelessWidget
+class ActivityFeed extends StatelessWidget
+class WeatherCard extends StatelessWidget
+class QuickActions extends StatelessWidget
+class EmergencyAlertBanner extends StatelessWidget
+
+// Features:
+- Pull-to-refresh with custom indicator
+- Real-time data streams (WebSocket/Riverpod)
+- Offline data caching
+- Customizable widget arrangement
+- Animated transitions
+- Data visualization charts
+Module 3: Field Management
+dart
+// Screens
+class FieldsListScreen extends StatefulWidget
+class FieldDetailScreen extends StatefulWidget
+class AddFieldScreen extends StatefulWidget
+class FieldMapScreen extends StatefulWidget
+class FieldTimelineScreen extends StatefulWidget
+
+// Widgets:
+class FieldCard extends StatelessWidget
+class FieldHealthGraph extends StatelessWidget
+class BoundaryMapEditor extends StatefulWidget
+class SoilInfoCard extends StatelessWidget
+class CropRotationWidget extends StatelessWidget
+
+// Features:
+- GPS boundary mapping (polygon drawing)
+- Photo documentation with EXIF data
+- Offline field data storage
+- QR code generation for field sharing
+- Soil type visualization
+- Historical data comparison
+- Export to PDF/Excel
+Module 4: AI Insights & Alerts
+dart
+// Screens
+class AlertsScreen extends StatefulWidget
+class AlertDetailScreen extends StatefulWidget
+class RecommendationsScreen extends StatefulWidget
+class TreatmentPlanScreen extends StatefulWidget
+
+// Widgets:
+class AlertCard extends StatelessWidget
+class SymptomGallery extends StatelessWidget
+class TreatmentTimeline extends StatelessWidget
+class CostCalculator extends StatefulWidget
+class PreventiveTips extends StatelessWidget
+
+// Features:
+- Push notification handling
+- SMS fallback for critical alerts
+- Image-based symptom recognition
+- Treatment cost estimation
+- Interactive prevention guides
+- Alert prioritization (color-coded)
+- Share alerts via messaging apps
+Module 5: Yield Forecasting
+dart
+// Screens
+class YieldForecastScreen extends StatefulWidget
+class ForecastDetailScreen extends StatefulWidget
+class RiskAnalysisScreen extends StatefulWidget
+class QualityMetricsScreen extends StatefulWidget
+
+// Widgets:
+class YieldChart extends StatelessWidget
+class RiskIndicator extends StatelessWidget
+class QualityScoreCard extends StatelessWidget
+class ScenarioSimulator extends StatefulWidget
+class HarvestWindowWidget extends StatelessWidget
+
+// Features:
+- Interactive timeline with slider
+- Animated chart transitions
+- Risk factor visualization
+- "What-if" scenario modeling
+- Export forecasts as images
+- Historical comparison overlay
+- Confidence interval display
+Module 6: Marketplace
+dart
+// Screens
+class MarketplaceScreen extends StatefulWidget
+class ContractDetailScreen extends StatefulWidget
+class CreateContractScreen extends StatefulWidget
+class BuyerProfileScreen extends StatefulWidget
+class TransactionHistoryScreen extends StatefulWidget
+
+// Widgets:
+class ContractCard extends StatelessWidget
+class PriceTicker extends StatefulWidget
+class SmartContractViewer extends StatelessWidget
+class EscrowStatusWidget extends StatelessWidget
+class RatingWidget extends StatelessWidget
+
+// Features:
+- Live market price updates
+- Smart contract interaction
+- QR code scanner for contracts
+- Escrow status tracking
+- In-app messaging
+- Buyer/seller ratings
+- Contract template library
+- Offline bidding capability
+Module 7: Financial Services
+dart
+// Screens
+class FinancialDashboardScreen extends StatefulWidget
+class LoanApplicationScreen extends StatefulWidget
+class PaymentHistoryScreen extends StatefulWidget
+class InsuranceScreen extends StatefulWidget
+class CreditScoreScreen extends StatefulWidget
+
+// Widgets:
+class LoanCalculator extends StatefulWidget
+class RepaymentSchedule extends StatelessWidget
+class DocumentUploadWidget extends StatelessWidget
+class PaymentReminderWidget extends StatelessWidget
+class FinancialTipCard extends StatelessWidget
+
+// Features:
+- Loan eligibility calculator
+- Document scanning/upload
+- Payment schedule visualization
+- Automatic payment reminders
+- Financial literacy content
+- Credit score simulator
+- Offline payment tracking
+Module 8: Supply Chain Traceability
+dart
+// Screens
+class TraceabilityScreen extends StatefulWidget
+class ProductJourneyScreen extends StatefulWidget
+class QualityCertificateScreen extends StatefulWidget
+
+// Widgets:
+class JourneyTimeline extends StatelessWidget
+class QRCodeScanner extends StatefulWidget
+class StorageConditionsWidget extends StatelessWidget
+class TransportMapWidget extends StatelessWidget
+
+// Features:
+- Interactive journey timeline
+- QR code generation/scanning
+- Temperature/humidity logs
+- Photo verification points
+- Shareable traceability report
+- Batch/lot number tracking
+- Real-time location updates
+Module 9: Learning & Support
+dart
+// Screens
+class LearningCenterScreen extends StatefulWidget
+class VideoLibraryScreen extends StatefulWidget
+class CommunityScreen extends StatefulWidget
+class ExpertQAScreen extends StatefulWidget
+class WeatherAdvisoryScreen extends StatefulWidget
+
+// Widgets:
+class VideoPlayerWidget extends StatelessWidget
+class KnowledgeBaseSearch extends StatefulWidget
+class CommunityChatWidget extends StatelessWidget
+class ExpertBookingWidget extends StatelessWidget
+
+// Features:
+- Offline video/download manager
+- Searchable knowledge base
+- Community chat with moderation
+- Expert appointment booking
+- Government scheme information
+- Weather alerts and advisories
+- Multi-language content
+Module 10: Settings & Profile
+dart
+// Screens
+class SettingsScreen extends StatefulWidget
+class ProfileScreen extends StatefulWidget
+class NotificationSettingsScreen extends StatefulWidget
+class PrivacySettingsScreen extends StatefulWidget
+class HelpScreen extends StatefulWidget
+
+// Features:
+- Theme switching (light/dark)
+- Data usage controls
+- Export all user data
+- App version/update checking
+- Rate/share app functionality
+- Contact support with logs
+- Account deletion option
+Technical Implementation Details
+Folder Structure
+text
+lib/
+├── core/
+│   ├── constants/
+│   ├── themes/
+│   ├── utils/
+│   ├── services/
+│   └── extensions/
+├── data/
+│   ├── models/
+│   ├── repositories/
+│   ├── datasources/
+│   └── mappers/
+├── domain/
+│   ├── entities/
+│   ├── repositories/
+│   └── usecases/
+└── presentation/
+    ├── widgets/
+    ├── common/
+    ├── features/
+    │   ├── auth/
+    │   ├── dashboard/
+    │   ├── fields/
+    │   ├── alerts/
+    │   ├── marketplace/
+    │   ├── finance/
+    │   ├── traceability/
+    │   └── settings/
+    └── routes/
+State Management with Riverpod
+dart
+// Example: Field Management Provider
+final fieldsProvider = StateNotifierProvider<FieldsNotifier, FieldsState>((ref) {
+  return FieldsNotifier(ref.watch(fieldRepositoryProvider));
+});
+
+class FieldsNotifier extends StateNotifier<FieldsState> {
+  final FieldRepository _repository;
+  
+  FieldsNotifier(this._repository) : super(FieldsState.initial());
+  
+  Future<void> fetchFields() async {
+    state = state.copyWith(loading: true);
+    final result = await _repository.getFields();
+    result.fold(
+      (failure) => state = state.copyWith(error: failure, loading: false),
+      (fields) => state = state.copyWith(fields: fields, loading: false),
+    );
+  }
+  
+  Future<void> addField(Field field) async {
+    // Online/offline handling
+    if (await ConnectivityService.isConnected()) {
+      await _repository.addField(field);
+    } else {
+      await _repository.cacheField(field);
+    }
+    await fetchFields();
+  }
+}
+Offline-First Architecture
+dart
+class OfflineSyncService {
+  final LocalDataSource _local;
+  final RemoteDataSource _remote;
+  final ConnectivityService _connectivity;
+  
+  Future<void> syncPendingOperations() async {
+    if (!await _connectivity.isConnected()) return;
+    
+    final pending = await _local.getPendingOperations();
+    for (final operation in pending) {
+      try {
+        await _remote.executeOperation(operation);
+        await _local.markOperationCompleted(operation.id);
+      } catch (e) {
+        await _local.markOperationFailed(operation.id, e.toString());
+      }
+    }
+  }
+  
+  Future<T> executeWithSync<T>({
+    required Future<T> Function() onlineOperation,
+    required Future<T> Function() offlineOperation,
+    required Future<void> Function(T) cacheOperation,
+  }) async {
+    if (await _connectivity.isConnected()) {
+      try {
+        final result = await onlineOperation();
+        await cacheOperation(result);
+        return result;
+      } catch (e) {
+        // Fallback to offline
+        return await offlineOperation();
+      }
+    } else {
+      return await offlineOperation();
+    }
+  }
+}
+Huawei Services Integration
+dart
+class HuaweiServices {
+  static Future<void> initialize() async {
+    if (Platform.isAndroid) {
+      // Check for HMS availability
+      final isHmsAvailable = await HuaweiApiAvailability.isHuaweiMobileServicesAvailable();
+      if (isHmsAvailable) {
+        // Use HMS services
+        await PushKit.init();
+        await MapKit.initialize();
+        await AccountKit.init();
+      } else {
+        // Fallback to Google services
+        await Firebase.initializeApp();
+      }
+    }
+  }
+  
+  static Future<void> sendPushNotification({
+    required String token,
+    required String title,
+    required String body,
+    required Map<String, dynamic> data,
+  }) async {
+    if (Platform.isAndroid && await isHuaweiDevice()) {
+      await PushKit.sendMessage(token: token, title: title, body: body, data: data);
+    } else {
+      await FirebaseMessaging.instance.sendMessage(
+        token: token,
+        notification: Notification(title: title, body: body),
+        data: data,
+      );
+    }
+  }
+}
+Performance Optimizations
+dart
+// 1. Image Optimization
+class OptimizedImage extends StatelessWidget {
+  final String url;
+  final double? width;
+  final double? height;
+  
+  @override
+  Widget build(BuildContext context) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: width,
+      height: height,
+      placeholder: (context, url) => ShimmerPlaceholder(),
+      errorWidget: (context, url, error) => Image.asset('assets/placeholder.png'),
+      cacheManager: DefaultCacheManager(),
+      fit: BoxFit.cover,
+      memCacheWidth: (width != null) ? (width! * 2).toInt() : 800,
+    );
+  }
+}
+
+// 2. List Optimization
+class OptimizedListView extends StatelessWidget {
+  final List<Widget> children;
+  
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      itemCount: children.length,
+      itemBuilder: (context, index) => children[index],
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      addAutomaticKeepAlives: true,
+      addRepaintBoundaries: true,
+      cacheExtent: 500,
+    );
+  }
+}
+
+// 3. Animation Optimization
+class OptimizedAnimations {
+  static AnimationController createAnimationController(TickerProvider vsync) {
+    return AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: vsync,
+      value: 0,
+    );
+  }
+  
+  static Future<void> staggeredAnimation(List<AnimationController> controllers) async {
+    for (var i = 0; i < controllers.length; i++) {
+      await Future.delayed(Duration(milliseconds: 100 * i));
+      controllers[i].forward();
+    }
+  }
+}
+Accessibility Implementation
+dart
+class AccessibleWidget extends StatelessWidget {
+  final Widget child;
+  final String? semanticLabel;
+  final bool? excludeSemantics;
+  
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticLabel,
+      excludeSemantics: excludeSemantics ?? false,
+      child: child,
+    );
+  }
+}
+
+class HighContrastTheme extends StatelessWidget {
+  final Widget child;
+  
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: ThemeData(
+        brightness: Brightness.dark,
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.white,
+          secondary: Colors.yellow,
+          surface: Colors.black,
+        ),
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+Development Timeline
+Phase 1: Foundation (Weeks 1-4)
+yaml
+Week 1-2:
+  - Project setup & architecture
+  - Design system implementation
+  - Core widgets development
+  - Authentication flow
+  
+Week 3-4:
+  - Dashboard implementation
+  - Field management (basic)
+  - Offline storage setup
+  - API integration layer
+Phase 2: Core Features (Weeks 5-10)
+yaml
+Week 5-6:
+  - AI Alerts system
+  - Yield forecasting
+  - Marketplace (basic)
+  - Multi-language support
+  
+Week 7-8:
+  - Financial services
+  - Supply chain traceability
+  - Push notifications
+  - Performance optimization
+  
+Week 9-10:
+  - Advanced analytics
+  - Community features
+  - Testing & bug fixes
+  - App store preparation
+Phase 3: Polish & Scale (Weeks 11-12)
+yaml
+Week 11:
+  - USSD/SMS fallback
+  - Feature phone optimization
+  - Security audit
+  - Analytics integration
+  
+Week 12:
+  - Final testing
+  - Performance tuning
+  - Documentation
+  - Deployment preparation
+Testing Strategy
+Unit Tests
+dart
+// Example test for FieldRepository
+void main() {
+  test('FieldRepository should cache fields when offline', () async {
+    final mockLocalDataSource = MockLocalDataSource();
+    final mockRemoteDataSource = MockRemoteDataSource();
+    final repository = FieldRepository(
+      localDataSource: mockLocalDataSource,
+      remoteDataSource: mockRemoteDataSource,
+    );
+    
+    when(mockLocalDataSource.cacheField(any)).thenAnswer((_) async {});
+    
+    final field = Field(id: '1', name: 'Test Field');
+    await repository.addField(field);
+    
+    verify(mockLocalDataSource.cacheField(field)).called(1);
+  });
+}
+Widget Tests
+dart
+// Example widget test
+void main() {
+  testWidgets('FieldCard displays correct information', (WidgetTester tester) async {
+    final field = Field(
+      id: '1',
+      name: 'Maize Field',
+      healthScore: 85,
+      cropType: 'Maize',
+    );
+    
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FieldCard(field: field),
+      ),
+    );
+    
+    expect(find.text('Maize Field'), findsOneWidget);
+    expect(find.text('85%'), findsOneWidget);
+    expect(find.byIcon(Icons.grass), findsOneWidget);
+  });
+}
+Integration Tests
+dart
+// Example integration test
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  
+  testWidgets('Complete farmer journey', (WidgetTester tester) async {
+    // Start app
+    await tester.pumpWidget(const AgriChainApp());
+    
+    // Login
+    await tester.enterText(find.byType(TextField).first, '+256783876390');
+    await tester.tap(find.text('Get OTP'));
+    await tester.pumpAndSettle();
+    
+    // Enter OTP
+    await tester.enterText(find.byType(TextField).first, '123456');
+    await tester.tap(find.text('Verify'));
+    await tester.pumpAndSettle(Duration(seconds: 2));
+    
+    // Navigate to add field
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    
+    // Add field details
+    await tester.enterText(find.byKey(Key('field_name')), 'Test Field');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    
+    // Verify field appears in list
+    expect(find.text('Test Field'), findsOneWidget);
+  });
+}
+Deployment Configuration
+pubspec.yaml Highlights
+yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management
+  flutter_riverpod: ^2.4.0
+  riverpod_annotation: ^2.2.0
+  
+  # UI & Design
+  flutter_screenutil: ^5.9.0
+  google_fonts: ^6.1.0
+  shimmer: ^3.0.0
+  lottie: ^2.7.0
+  
+  # Navigation
+  go_router: ^13.0.0
+  auto_route: ^7.0.0
+  
+  # Network & API
+  dio: ^5.4.0
+  retrofit: ^4.0.1
+  web_socket_channel: ^2.4.0
+  
+  # Database & Storage
+  isar: ^3.1.0+1
+  hive: ^2.2.3
+  flutter_secure_storage: ^9.0.0
+  
+  # Maps & Location
+  mapbox_gl: ^1.0.0
+  geolocator: ^10.0.0
+  
+  # Media
+  image_picker: ^1.0.4
+  image_cropper: ^5.0.1
+  cached_network_image: ^3.3.0
+  
+  # Notifications
+  firebase_messaging: ^14.7.10
+  huawei_push: ^6.7.0+300
+  
+  # QR Code
+  qr_flutter: ^4.2.0
+  mobile_scanner: ^3.6.0
+  
+  # Charts
+  fl_chart: ^0.66.0
+  syncfusion_flutter_charts: ^23.2.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  riverpod_generator: ^2.3.0
+  build_runner: ^2.4.7
+  mockito: ^5.4.0
+  integration_test:
+    sdk: flutter
+Success Metrics & Analytics
+dart
+class AnalyticsService {
+  static Future<void> trackEvent(String event, Map<String, dynamic> params) async {
+    // Track to Firebase Analytics
+    await FirebaseAnalytics.instance.logEvent(
+      name: event,
+      parameters: params,
+    );
+    
+    // Track to Huawei Analytics if available
+    if (await HuaweiServices.isHuaweiDevice()) {
+      await HmsAnalytics.instance.onEvent(event, params);
+    }
+    
+    // For offline tracking
+    await LocalAnalytics.cacheEvent(event, params);
+  }
+  
+  static Future<void> trackUserFlow(String flowName) async {
+    await trackEvent('user_flow', {
+      'flow': flowName,
+      'timestamp': DateTime.now().toIso8601String(),
+      'device_info': await DeviceInfo.getInfo(),
+      'connection_type': await ConnectivityService.getConnectionType(),
+    });
+  }
+}
+This Flutter implementation provides:
+
+Modern, responsive UI with agriculture-specific components
+
+Offline-first architecture for low-connectivity areas
+
+Huawei services integration alongside Google fallbacks
+
+Accessibility features for diverse users
+
+Performance optimizations for low-end devices
+
+Comprehensive testing strategy
+
+Scalable architecture for future features
+
+The design uses a green color palette as requested, with modern Material Design principles tailored for the African agricultural context.

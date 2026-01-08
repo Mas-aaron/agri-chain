@@ -1,18 +1,37 @@
 ﻿import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/widgets/confidence_bar.dart';
 
 class ResultsScreen extends StatelessWidget {
   final File imageFile;
   final List<Map<String, dynamic>> predictions;
   final int inferenceTime;
+  final String? selectedFieldId;
 
   const ResultsScreen({
     super.key,
     required this.imageFile,
     required this.predictions,
     required this.inferenceTime,
+    this.selectedFieldId,
   });
+
+  double _asDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  String _formatPercent(dynamic value) {
+    final v = _asDouble(value);
+    return '${v.toStringAsFixed(1)}%';
+  }
+
+  String _normalizeLabel(String label) {
+    return label.replaceAll('_', ' ').trim().toLowerCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +100,7 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Widget _buildDiagnosisCard(bool isHealthy, Map<String, dynamic> prediction) {
+    final percentage = _asDouble(prediction['percentage']);
     return Card(
       color: isHealthy ? Colors.green[50] : Colors.orange[50],
       child: Padding(
@@ -114,7 +134,7 @@ class ResultsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Confidence: ${prediction['percentage'].toStringAsFixed(1)}%',
+                    'Confidence: ${percentage.toStringAsFixed(1)}%',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -144,7 +164,7 @@ class ResultsScreen extends StatelessWidget {
         ...predictions.map((pred) {
           return ConfidenceBar(
             label: pred['label'],
-            percentage: pred['percentage'],
+            percentage: _asDouble(pred['percentage']),
             isTop: predictions.indexOf(pred) == 0,
           );
         }).toList(),
@@ -268,21 +288,14 @@ class ResultsScreen extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: ElevatedButton(
-              onPressed: () => _saveResult(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+            child: FilledButton(
+              onPressed: () => _createAlert(context),
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.save, size: 20),
+                  Icon(Icons.notifications_active_outlined, size: 20),
                   SizedBox(width: 8),
-                  Text('Save Result'),
+                  Text('Create alert'),
                 ],
               ),
             ),
@@ -292,15 +305,69 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _createAlert(BuildContext context) async {
+    try {
+      final top = predictions.first;
+      final label = (top['label'] as String?) ?? 'Unknown';
+      final confidence = top['percentage'] ?? top['confidence'];
+
+      final lower = _normalizeLabel(label);
+      final pct = _asDouble(confidence);
+      final severity = lower.contains('healthy')
+          ? 'Low'
+          : (pct >= 90.0 ? 'Critical' : (pct >= 70.0 ? 'High' : 'Medium'));
+
+      final top3 = predictions.take(3).map((p) {
+        final pLabel = (p['label'] as String?) ?? 'Unknown';
+        return {
+          'label': pLabel,
+          'confidence': p['percentage'] ?? p['confidence'],
+          'confidenceText': _formatPercent(p['percentage'] ?? p['confidence']),
+        };
+      }).toList();
+
+      await context.read<AlertsProvider>().addAlert(
+            AlertItem(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              title: 'Manual Alert: $label',
+              message: 'Result: $label (confidence: ${_formatPercent(confidence)}).',
+              category: 'Health',
+              severity: severity,
+              createdAt: DateTime.now(),
+              fieldId: selectedFieldId,
+              imagePath: imageFile.path,
+              extra: {
+                'top': top,
+                'top3': top3,
+                'source': 'manual',
+              },
+            ),
+          );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alert created.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to create alert: $e')),
+        );
+      }
+    }
+  }
+
   String _getTreatmentAdvice(String disease) {
+    final key = _normalizeLabel(disease);
     final adviceMap = {
-      'healthy': 'Your maize plant appears healthy. Continue with regular watering and fertilization.',
-      'northern leaf blight': 'Apply fungicides containing azoxystrobin or pyraclostrobin. Remove infected leaves and practice crop rotation.',
-      'common rust': 'Use resistant varieties if available. Apply fungicides like triazoles at first sign of infection.',
-      'gray leaf spot': 'Practice crop rotation and tillage to reduce spores. Apply strobilurin fungicides if needed.',
+      'healthy': 'Your maize plant appears healthy. Continue with regular monitoring, watering, and fertilization.',
+      'blight': 'Remove heavily infected leaves. Avoid overhead irrigation. Consider an approved fungicide and rotate crops next season.',
+      'common rust': 'Remove infected leaves where possible. Use resistant varieties and consider a triazole fungicide at early infection.',
+      'gray leaf spot': 'Reduce residue (tillage/rotation). Improve airflow with proper spacing. Consider a strobilurin fungicide if severe.',
     };
 
-    return adviceMap[disease.toLowerCase()] ??
+    return adviceMap[key] ??
         'Consult with an agricultural expert for specific treatment recommendations.';
   }
 

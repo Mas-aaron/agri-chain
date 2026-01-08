@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:agri_chain/app_shell.dart';
+import 'package:agri_chain/splash_screen.dart';
 import 'package:agri_chain/services/tflite_service.dart';
 import 'package:agri_chain/providers/scan_provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
@@ -44,7 +44,6 @@ class MaizeDetectorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const primary = Color(0xFF2E7D32);
-    const primaryLight = Color(0xFF4CAF50);
     const primaryDark = Color(0xFF1B5E20);
     const background = Color(0xFFF8F9FA);
 
@@ -59,16 +58,19 @@ class MaizeDetectorApp extends StatelessWidget {
     return MaterialApp(
       title: 'AgriChain',
       theme: ThemeData(
+        useMaterial3: true,
         colorScheme: colorScheme,
         scaffoldBackgroundColor: background,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: primary,
+        appBarTheme: AppBarTheme(
+          backgroundColor: colorScheme.surface,
+          foregroundColor: colorScheme.onSurface,
           elevation: 0,
           centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          titleTextStyle: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
           ),
         ),
         fontFamily: 'Inter',
@@ -101,23 +103,39 @@ class MaizeDetectorApp extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: primaryLight, width: 2),
+            borderSide: BorderSide(color: colorScheme.primary, width: 2),
           ),
         ),
         cardTheme: CardTheme(
-          elevation: 2,
+          elevation: 0,
+          color: colorScheme.surface,
+          surfaceTintColor: colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          selectedItemColor: primary,
-          unselectedItemColor: Colors.grey,
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          selectedItemColor: colorScheme.primary,
+          unselectedItemColor: colorScheme.onSurfaceVariant,
           type: BottomNavigationBarType.fixed,
+        ),
+        navigationBarTheme: NavigationBarThemeData(
+          height: 70,
+          backgroundColor: colorScheme.surface,
+          indicatorColor: colorScheme.primary.withOpacity(0.12),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            return TextStyle(
+              fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w600,
+              fontSize: 12,
+              color: states.contains(WidgetState.selected)
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            );
+          }),
         ),
         iconTheme: const IconThemeData(color: primaryDark),
       ),
-      home: const AppShell(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

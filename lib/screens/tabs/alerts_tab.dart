@@ -267,3 +267,5 @@ class _AlertDetailScreen extends StatelessWidget {
     );
   }
 }
+
+

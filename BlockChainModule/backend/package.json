@@ -1,0 +1,41 @@
+{
+  "name": "agritech-backend",
+  "version": "1.0.0",
+  "description": "Backend API for AgriTech Blockchain Module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest --coverage",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js"
+  },
+  "keywords": [
+    "blockchain",
+    "agriculture",
+    "ethereum",
+    "tokens"
+  ],
+  "author": "AgriTech Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ethers": "^6.7.1",
+    "dotenv": "^16.3.1",
+    "sqlite3": "^5.1.6",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.2",
+    "joi": "^17.11.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

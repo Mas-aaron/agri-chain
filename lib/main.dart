@@ -106,14 +106,14 @@ class MaizeDetectorApp extends StatelessWidget {
             borderSide: BorderSide(color: colorScheme.primary, width: 2),
           ),
         ),
-        cardTheme: CardTheme(
-          elevation: 0,
-          color: colorScheme.surface,
-          surfaceTintColor: colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
+        // cardTheme: CardTheme(
+        //   elevation: 0,
+        //   color: colorScheme.surface,
+        //   surfaceTintColor: colorScheme.surface,
+        //   shape: RoundedRectangleBorder(
+        //     borderRadius: BorderRadius.circular(16),
+        //   ),
+        // ),
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           selectedItemColor: colorScheme.primary,
           unselectedItemColor: colorScheme.onSurfaceVariant,

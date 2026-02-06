@@ -1,0 +1,73 @@
+name: agri_yield_frontend
+description: "AgriYield Blockchain Frontend - Farmer Portal, Admin Dashboard, and Mobile App"
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI & Theme
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  material_design_icons_flutter: ^7.0.7296
+  
+  # State Management
+  provider: ^6.1.0
+  riverpod: ^2.4.0
+  riverpod_generator: ^2.3.0
+  
+  # HTTP & API
+  http: ^1.1.0
+  dio: ^5.3.0
+  
+  # Blockchain & Web3
+  web3dart: ^2.7.0
+  eth_sig_util: ^5.0.0
+  
+  # Storage & Data
+  shared_preferences: ^2.2.0
+  sqflite: ^2.3.0
+  path_provider: ^2.1.0
+  
+  # Charts & Visualization
+  fl_chart: ^0.65.0
+  intl: ^0.19.0
+  
+  # Navigation
+  go_router: ^12.0.0
+  
+  # Async & Streams
+  async: ^2.11.0
+  
+  # Utilities
+  uuid: ^4.0.0
+  json_annotation: ^4.8.0
+  json_serializable: ^6.7.0
+  freezed_annotation: ^2.4.0
+  freezed: ^2.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/logos/
+  
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Roboto-Light.ttf
+          weight: 300

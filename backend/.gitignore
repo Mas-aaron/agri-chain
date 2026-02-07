@@ -1,0 +1,20 @@
+.vercel
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ML artifacts (keep out of git; store via releases or object storage)
+*.joblib
+*.pkl

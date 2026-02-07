@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# ML artifacts
+*.joblib
+*.pkl

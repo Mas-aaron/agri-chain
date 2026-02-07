@@ -4,7 +4,7 @@ import 'package:agri_chain/screens/tabs/alerts_tab.dart';
 import 'package:agri_chain/screens/tabs/dashboard_tab.dart';
 import 'package:agri_chain/screens/tabs/fields_tab.dart';
 import 'package:agri_chain/screens/tabs/settings_tab.dart';
-import 'package:agri_chain/features/blockchain/screens/blockchain_tab.dart';
+// Removed direct blockchain nav entry; access via Dashboard only
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -22,7 +22,6 @@ class _AppShellState extends State<AppShell> {
       const DashboardTab(),
       const HomeScreen(embedded: true),
       const FieldsTab(),
-      const BlockchainTab(),
       const AlertsTab(),
       const SettingsTab(),
     ];
@@ -31,7 +30,6 @@ class _AppShellState extends State<AppShell> {
       'Dashboard',
       'Scan',
       'Fields',
-      'Yield',
       'Alerts',
       'Settings',
     ];
@@ -62,11 +60,6 @@ class _AppShellState extends State<AppShell> {
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
             label: 'Fields',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.agriculture_outlined),
-            selectedIcon: Icon(Icons.agriculture),
-            label: 'Yield',
           ),
           NavigationDestination(
             icon: Icon(Icons.notifications_outlined),

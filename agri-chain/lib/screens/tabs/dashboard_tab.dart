@@ -7,12 +7,17 @@ import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 
+Color _alpha(Color c, double opacity) {
+  final a = (opacity * 255).round().clamp(0, 255);
+  return c.withAlpha(a);
+}
+
 class DashboardTab extends StatelessWidget {
   const DashboardTab({super.key});
 
   String _formatTime(DateTime dt) {
     final local = dt.toLocal();
-    final two = (int v) => v.toString().padLeft(2, '0');
+    String two(int v) => v.toString().padLeft(2, '0');
     return '${local.year}-${two(local.month)}-${two(local.day)} ${two(local.hour)}:${two(local.minute)}';
   }
 
@@ -55,8 +60,10 @@ class DashboardTab extends StatelessWidget {
 
         return RefreshIndicator(
           onRefresh: () async {
-            await context.read<FieldsProvider>().ensureLoaded();
-            await context.read<AlertsProvider>().ensureLoaded();
+            final fieldsProvider = context.read<FieldsProvider>();
+            final alertsProvider = context.read<AlertsProvider>();
+            await fieldsProvider.ensureLoaded();
+            await alertsProvider.ensureLoaded();
           },
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -305,7 +312,7 @@ class _RecentActivityCard extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: (color ?? Theme.of(context).colorScheme.primary).withOpacity(0.12),
+                              color: _alpha(color ?? Theme.of(context).colorScheme.primary, 0.12),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
@@ -337,7 +344,7 @@ class _RecentActivityCard extends StatelessWidget {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       decoration: BoxDecoration(
-                                        color: (color ?? Theme.of(context).colorScheme.primary).withOpacity(0.10),
+                                        color: _alpha(color ?? Theme.of(context).colorScheme.primary, 0.10),
                                         borderRadius: BorderRadius.circular(999),
                                       ),
                                       child: Text(
@@ -380,7 +387,7 @@ class _DashboardAlertDetailScreen extends StatelessWidget {
 
   String _formatTime(DateTime dt) {
     final local = dt.toLocal();
-    final two = (int v) => v.toString().padLeft(2, '0');
+    String two(int v) => v.toString().padLeft(2, '0');
     return '${local.year}-${two(local.month)}-${two(local.day)} ${two(local.hour)}:${two(local.minute)}';
   }
 

@@ -15,21 +15,22 @@ class ScanButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ElevatedButton.icon(
+        FilledButton.icon(
           onPressed: isLoading ? null : onCameraPressed,
-          icon: const Icon(Icons.photo_camera),
-          label: const Text('Take Photo'),
+          icon: const Icon(Icons.camera_alt_outlined),
+          label: const Text('Open Camera'),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: isLoading ? null : onGalleryPressed,
-          icon: const Icon(Icons.photo_library),
-          label: const Text('Pick from Gallery'),
+          icon: const Icon(Icons.photo_library_outlined),
+          label: const Text('Choose from Gallery'),
         ),
         if (isLoading) ...[
           const SizedBox(height: 16),
-          const CircularProgressIndicator(),
+          const Center(child: CircularProgressIndicator()),
         ]
       ],
     );

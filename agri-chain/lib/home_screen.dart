@@ -261,29 +261,49 @@ class _HomeScreenState extends State<HomeScreen> {
           subtitle: 'Know what to look for before symptoms spread.',
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.15,
           children: [
             DiseaseCard(
               diseaseName: 'Northern Leaf Blight',
               severity: 'High',
               color: Colors.orange,
+              icon: Icons.local_fire_department_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
             ),
             DiseaseCard(
               diseaseName: 'Common Rust',
               severity: 'Medium',
               color: Colors.red,
+              icon: Icons.bug_report_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
             ),
             DiseaseCard(
               diseaseName: 'Gray Leaf Spot',
               severity: 'High',
               color: Colors.blue,
+              icon: Icons.grain_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
             ),
             DiseaseCard(
               diseaseName: 'Healthy',
               severity: 'None',
               color: scheme.primary,
+              icon: Icons.check_circle_outline,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Great! Keep scouting weekly and scan if you see new spots.')),
+              ),
             ),
           ],
         ),

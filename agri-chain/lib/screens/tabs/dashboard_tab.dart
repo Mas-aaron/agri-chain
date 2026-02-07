@@ -1,15 +1,265 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
+import 'package:agri_chain/services/weather_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 
 Color _alpha(Color c, double opacity) {
   final a = (opacity * 255).round().clamp(0, 255);
   return c.withAlpha(a);
+}
+
+class _WeatherFeatureCard extends StatefulWidget {
+  const _WeatherFeatureCard();
+
+  @override
+  State<_WeatherFeatureCard> createState() => _WeatherFeatureCardState();
+}
+
+class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
+  static const double _fallbackLat = -1.286389;
+  static const double _fallbackLon = 36.817223;
+  static const String _gpsLatKey = 'agri_chain_weather_lat_v1';
+  static const String _gpsLonKey = 'agri_chain_weather_lon_v1';
+  static const Duration _gpsTimeout = Duration(seconds: 6);
+
+  final WeatherApiService _api = WeatherApiService();
+  late Future<WeatherSnapshot> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<({double lat, double lon})> _resolveCoordinates(String rawLocation) async {
+    final saved = await _readSavedCoordinates();
+    if (saved != null) return saved;
+
+    final parsed = _tryParseLatLon(rawLocation);
+    if (parsed != null) return parsed;
+    return (lat: _fallbackLat, lon: _fallbackLon);
+  }
+
+  Future<({double lat, double lon})?> _readSavedCoordinates() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lat = prefs.getDouble(_gpsLatKey);
+    final lon = prefs.getDouble(_gpsLonKey);
+    if (lat == null || lon == null) return null;
+    return (lat: lat, lon: lon);
+  }
+
+  Future<void> _saveCoordinates({required double lat, required double lon}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_gpsLatKey, lat);
+    await prefs.setDouble(_gpsLonKey, lon);
+  }
+
+  ({double lat, double lon})? _tryParseLatLon(String input) {
+    final cleaned = input.trim();
+    if (cleaned.isEmpty) return null;
+    final parts = cleaned.split(',');
+    if (parts.length != 2) return null;
+
+    final lat = double.tryParse(parts[0].trim());
+    final lon = double.tryParse(parts[1].trim());
+    if (lat == null || lon == null) return null;
+    return (lat: lat, lon: lon);
+  }
+
+  Future<WeatherSnapshot> _load() async {
+    final fields = context.read<FieldsProvider>().fields;
+    final rawLocation = fields.isEmpty ? '' : fields.first.location;
+
+    final gps = await _tryGetDeviceCoordinatesIfPermitted();
+    if (gps != null) {
+      await _saveCoordinates(lat: gps.lat, lon: gps.lon);
+      return _api.fetchCurrent(latitude: gps.lat, longitude: gps.lon);
+    }
+
+    final coords = await _resolveCoordinates(rawLocation);
+    return _api.fetchCurrent(latitude: coords.lat, longitude: coords.lon);
+  }
+
+  Future<({double lat, double lon})?> _tryGetDeviceCoordinatesIfPermitted() async {
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) return null;
+
+    final permission = await Geolocator.checkPermission();
+    final allowed = permission == LocationPermission.whileInUse || permission == LocationPermission.always;
+    if (!allowed) return null;
+
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null) return (lat: last.latitude, lon: last.longitude);
+    } catch (_) {
+      // ignore
+    }
+
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+      ).timeout(_gpsTimeout);
+      return (lat: pos.latitude, lon: pos.longitude);
+    } on TimeoutException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _useDeviceGps() async {
+    final enabled = await Geolocator.isLocationServiceEnabled();
+    if (!enabled) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enable location services to use GPS.')),
+      );
+      return;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission denied.')),
+      );
+      return;
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission permanently denied. Enable it in Settings.')),
+      );
+      return;
+    }
+
+    final pos = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+    );
+    await _saveCoordinates(lat: pos.latitude, lon: pos.longitude);
+
+    if (!mounted) return;
+    setState(() {
+      _future = _api.fetchCurrent(latitude: pos.latitude, longitude: pos.longitude);
+    });
+  }
+
+  String _describeCode(int code) {
+    if (code == 0) return 'Clear sky';
+    if (code == 1 || code == 2) return 'Partly cloudy';
+    if (code == 3) return 'Cloudy';
+    if (code == 45 || code == 48) return 'Fog';
+    if (code >= 51 && code <= 57) return 'Drizzle';
+    if (code >= 61 && code <= 67) return 'Rain';
+    if (code >= 71 && code <= 77) return 'Snow';
+    if (code >= 80 && code <= 82) return 'Showers';
+    if (code >= 95) return 'Thunderstorm';
+    return 'Weather';
+  }
+
+  void _retry() {
+    setState(() {
+      _future = _load();
+    });
+  }
+
+  Future<void> _openActionsSheet({required bool isLoading, required bool hasError, required bool hasData}) async {
+    if (isLoading) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.my_location),
+                title: const Text('Use device GPS'),
+                subtitle: const Text('Get weather for your current location'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _useDeviceGps();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('Refresh weather'),
+                subtitle: Text(hasError || !hasData ? 'Retry fetching weather' : 'Fetch the latest update'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _retry();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<WeatherSnapshot>(
+      future: _future,
+      builder: (context, snapshot) {
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final hasError = snapshot.hasError;
+        final data = snapshot.data;
+
+        String subtitle;
+        Widget? trailing;
+
+        if (isLoading) {
+          subtitle = 'Loading…';
+          trailing = const SizedBox(
+            height: 18,
+            width: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        } else if (hasError || data == null) {
+          subtitle = 'Tap to retry';
+          trailing = const Icon(Icons.refresh);
+        } else {
+          final temp = data.temperatureC.toStringAsFixed(1);
+          final wind = data.windSpeed.toStringAsFixed(0);
+          subtitle = '${_describeCode(data.weatherCode)} • Wind ${wind}km/h';
+          trailing = Text(
+            '$temp°C',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          );
+        }
+
+        return FeatureCard(
+          icon: Icons.cloud_outlined,
+          title: 'Weather',
+          subtitle: subtitle,
+          trailing: trailing,
+          onTap: () {
+            _openActionsSheet(
+              isLoading: isLoading,
+              hasError: hasError,
+              hasData: data != null,
+            );
+          },
+        );
+      },
+    );
+  }
 }
 
 class DashboardTab extends StatelessWidget {
@@ -119,16 +369,10 @@ class DashboardTab extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Row(
-                children: const [
-                  Expanded(
-                    child: FeatureCard(
-                      icon: Icons.cloud_outlined,
-                      title: 'Weather',
-                      subtitle: 'Coming soon',
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
+                children: [
+                  const Expanded(child: _WeatherFeatureCard()),
+                  const SizedBox(width: 12),
+                  const Expanded(
                     child: FeatureCard(
                       icon: Icons.show_chart,
                       title: 'Market prices',
@@ -399,7 +643,6 @@ class _DashboardAlertDetailScreen extends StatelessWidget {
         title: const Text('Activity'),
         actions: [
           IconButton(
-            tooltip: alert.isResolved ? 'Mark unresolved' : 'Mark resolved',
             icon: Icon(alert.isResolved ? Icons.check_circle : Icons.check_circle_outline),
             onPressed: () => context.read<AlertsProvider>().markResolved(alert.id, isResolved: !alert.isResolved),
           ),

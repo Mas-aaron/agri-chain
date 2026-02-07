@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 // For this example, we will retrieve it within initState as shown below.
 
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({Key? key}) : super(key: key);
+  const CameraScreen({super.key});
 
   @override
   _CameraScreenState createState() => _CameraScreenState();

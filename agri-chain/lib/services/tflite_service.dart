@@ -115,7 +115,7 @@ class TFLiteService {
   if (!_isInitialized) await initialize();
   
   print('=== MODEL VERIFICATION ===');
-  print('Expected input size: ${_inputWidth} x ${_inputHeight} x 3');
+  print('Expected input size: $_inputWidth x $_inputHeight x 3');
   print('Model input shape: $_inputShape');
   print('Model output shape: $_outputShape');
   print('Model output type: $_outputType');

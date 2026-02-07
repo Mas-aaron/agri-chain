@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
+import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
+import 'package:agri_chain/screens/yield_prediction_screen.dart';
 
 class DashboardTab extends StatelessWidget {
   const DashboardTab({super.key});
@@ -48,6 +50,8 @@ class DashboardTab extends StatelessWidget {
         final alertsCount = context.watch<AlertsProvider>().alerts.length;
         final alerts = context.watch<AlertsProvider>().alerts;
 
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
+
         return RefreshIndicator(
           onRefresh: () async {
             await context.read<FieldsProvider>().ensureLoaded();
@@ -56,16 +60,12 @@ class DashboardTab extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text(
-                'Welcome back',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Here\'s what\'s happening today.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              _DashboardHeader(isLoading: isLoading),
               const SizedBox(height: 16),
+              _QuickActionsRow(),
+              const SizedBox(height: 10),
+              const _SecondaryActionsRow(),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -117,6 +117,129 @@ class DashboardTab extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _DashboardHeader extends StatelessWidget {
+  final bool isLoading;
+
+  const _DashboardHeader({required this.isLoading});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: scheme.primary.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Icon(Icons.dashboard_customize_outlined, color: scheme.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Dashboard', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                isLoading ? 'Loading your farm summary…' : 'Here\'s what\'s happening today.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickActionsRow extends StatelessWidget {
+  const _QuickActionsRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Use the bottom bar to open Scan.')),
+              );
+            },
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: const Text('Scan'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () {
+              // Navigation is handled by the bottom nav; keep this as a gentle hint.
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Use the bottom bar to open Fields.')),
+              );
+            },
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Fields'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const YieldPredictionScreen()),
+              );
+            },
+            icon: const Icon(Icons.auto_graph_outlined),
+            label: const Text('Yield'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SecondaryActionsRow extends StatelessWidget {
+  const _SecondaryActionsRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BlockchainHubScreen()),
+              );
+            },
+            icon: const Icon(Icons.hub_outlined),
+            label: const Text('Blockchain'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Use the bottom bar to open Alerts.')),
+              );
+            },
+            icon: const Icon(Icons.notifications_outlined),
+            label: const Text('Alerts'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -331,6 +454,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -339,10 +463,10 @@ class _StatCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                color: scheme.primary.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+              child: Icon(icon, color: scheme.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -351,7 +475,7 @@ class _StatCard extends StatelessWidget {
                 children: [
                   Text(title, style: Theme.of(context).textTheme.bodyMedium),
                   const SizedBox(height: 4),
-                  Text(value, style: Theme.of(context).textTheme.titleLarge),
+                  Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
                 ],
               ),
             ),

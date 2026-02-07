@@ -1,8 +1,10 @@
 ﻿import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/widgets/confidence_bar.dart';
+import 'package:agri_chain/services/recommendation_service.dart';
 
 class ResultsScreen extends StatelessWidget {
   final File imageFile;
@@ -36,7 +38,8 @@ class ResultsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final topPrediction = predictions.first;
-    final isHealthy = topPrediction['label'].toLowerCase().contains('healthy');
+    final rec = RecommendationService.recommendForLabel((topPrediction['label'] as String?) ?? '');
+    final isHealthy = rec.isHealthy;
 
     return Scaffold(
       appBar: AppBar(
@@ -67,6 +70,10 @@ class ResultsScreen extends StatelessWidget {
 
             // Treatment Advice
             _buildTreatmentAdvice(topPrediction['label']),
+            const SizedBox(height: 24),
+
+            // Recommendations
+            _buildRecommendations(context, rec),
             const SizedBox(height: 24),
 
             // Stats
@@ -359,16 +366,235 @@ class ResultsScreen extends StatelessWidget {
   }
 
   String _getTreatmentAdvice(String disease) {
-    final key = _normalizeLabel(disease);
-    final adviceMap = {
-      'healthy': 'Your maize plant appears healthy. Continue with regular monitoring, watering, and fertilization.',
-      'blight': 'Remove heavily infected leaves. Avoid overhead irrigation. Consider an approved fungicide and rotate crops next season.',
-      'common rust': 'Remove infected leaves where possible. Use resistant varieties and consider a triazole fungicide at early infection.',
-      'gray leaf spot': 'Reduce residue (tillage/rotation). Improve airflow with proper spacing. Consider a strobilurin fungicide if severe.',
-    };
+    final key = RecommendationService.normalizeLabel(disease);
 
-    return adviceMap[key] ??
-        'Consult with an agricultural expert for specific treatment recommendations.';
+    if (RecommendationService.isNonMaizeLabel(key)) {
+      return 'This image does not look like a maize leaf. Please scan a clear maize leaf image in good lighting and try again.';
+    }
+    if (key.contains('healthy')) {
+      return 'Your maize plant appears healthy. Continue with regular monitoring, watering, and fertilization.';
+    }
+    if (key.contains('blight')) {
+      return 'Remove heavily infected leaves. Avoid overhead irrigation. Consider an approved fungicide and rotate crops next season.';
+    }
+    if (key.contains('common rust') || key.contains('rust')) {
+      return 'Remove infected leaves where possible. Use resistant varieties and consider a triazole fungicide at early infection.';
+    }
+    if (key.contains('gray leaf spot') || key.contains('leaf spot')) {
+      return 'Reduce residue (tillage/rotation). Improve airflow with proper spacing. Consider a strobilurin fungicide if severe.';
+    }
+    return 'Consult with an agricultural expert for specific treatment recommendations.';
+  }
+
+  Widget _buildRecommendations(BuildContext context, RecommendationResult rec) {
+    final scheme = Theme.of(context).colorScheme;
+
+    if (rec.isNonMaize) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 2),
+                child: Icon(Icons.info_outline, color: Colors.orange),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'No recommendations available for this image. Please scan a clear maize leaf.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (rec.isHealthy) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.verified_outlined, color: scheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Leaf looks healthy. No chemicals recommended. Continue monitoring and good agronomic practices.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.local_pharmacy_outlined, color: scheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Credited agrochemicals & approved sellers',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Choose products from approved sellers to reduce counterfeit risk.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            if (rec.chemicals.isEmpty)
+              Text(
+                'No recommendations available yet for “${rec.normalizedKey}”.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              )
+            else
+              ...rec.chemicals.map((chem) {
+                final sellers = rec.sellersByChemicalId[chem.id] ?? const <ApprovedSeller>[];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: scheme.primary.withOpacity(0.12)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                chem.name,
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: scheme.primary.withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.verified, size: 16, color: scheme.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    chem.isCredited ? 'Credited' : 'Unverified',
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Active ingredient: ${chem.activeIngredient}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          chem.usage,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Approved sellers',
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 8),
+                        if (sellers.isEmpty)
+                          Text('No sellers linked yet.', style: Theme.of(context).textTheme.bodySmall)
+                        else
+                          ...sellers.map((s) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(Icons.storefront_outlined, size: 18, color: scheme.primary),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          s.name,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(fontWeight: FontWeight.w700),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${s.location} • ${s.phone}${s.licenseId == null ? '' : ' • License: ${s.licenseId}'}',
+                                          style: Theme.of(context).textTheme.bodySmall,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            OutlinedButton.icon(
+                                              onPressed: () => _callPhone(s.phone),
+                                              icon: const Icon(Icons.call_outlined, size: 18),
+                                              label: const Text('Call'),
+                                            ),
+                                            OutlinedButton.icon(
+                                              onPressed: () => _smsPhone(s.phone),
+                                              icon: const Icon(Icons.sms_outlined, size: 18),
+                                              label: const Text('SMS'),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _callPhone(String phone) async {
+    final normalized = phone.replaceAll(' ', '');
+    final uri = Uri(scheme: 'tel', path: normalized);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _smsPhone(String phone) async {
+    final normalized = phone.replaceAll(' ', '');
+    final uri = Uri(scheme: 'sms', path: normalized);
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _shareResults(BuildContext context) {

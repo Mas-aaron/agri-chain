@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 
+Color _alpha(Color c, double opacity) {
+  final a = (opacity * 255).round().clamp(0, 255);
+  return c.withAlpha(a);
+}
+
 class DiseaseCard extends StatelessWidget {
   final String diseaseName;
   final String severity;
@@ -18,7 +23,7 @@ class DiseaseCard extends StatelessWidget {
       width: 160,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: _alpha(color, 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -34,7 +39,7 @@ class DiseaseCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Severity: $severity',
-            style: TextStyle(color: color.withOpacity(0.8)),
+            style: TextStyle(color: _alpha(color, 0.8)),
           ),
         ],
       ),

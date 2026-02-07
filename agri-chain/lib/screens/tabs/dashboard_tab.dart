@@ -5,6 +5,7 @@ import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
 
 class DashboardTab extends StatelessWidget {
   const DashboardTab({super.key});
@@ -60,47 +61,71 @@ class DashboardTab extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _DashboardHeader(isLoading: isLoading),
-              const SizedBox(height: 16),
+              GradientHeroCard(
+                icon: Icons.dashboard_customize_outlined,
+                title: 'Welcome back',
+                subtitle: isLoading ? 'Loading your farm summary…' : 'Here\'s what\'s happening today.',
+              ),
+              const SizedBox(height: 14),
               _QuickActionsRow(),
               const SizedBox(height: 10),
               const _SecondaryActionsRow(),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
-                    child: _StatCard(
-                      title: 'Active fields',
+                    child: MiniStatTile(
+                      label: 'Active fields',
                       value: '$fieldsCount',
-                      icon: Icons.map,
+                      icon: Icons.map_outlined,
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _StatCard(
-                      title: 'Pending alerts',
+                    child: MiniStatTile(
+                      label: 'Pending alerts',
                       value: '$alertsCount',
-                      icon: Icons.notifications,
+                      icon: Icons.notifications_outlined,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+              FeatureCard(
+                icon: Icons.auto_graph_outlined,
+                title: 'Yield forecast',
+                subtitle: 'Predict maize yield using the backend model',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const YieldPredictionScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              FeatureCard(
+                icon: Icons.storefront_outlined,
+                title: 'Agri‑Market',
+                subtitle: 'Tokenize yield into Future Harvest Contracts (simulation)',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BlockchainHubScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: const [
                   Expanded(
-                    child: _PlaceholderCard(
+                    child: FeatureCard(
+                      icon: Icons.cloud_outlined,
                       title: 'Weather',
                       subtitle: 'Coming soon',
-                      icon: Icons.cloud,
                     ),
                   ),
                   SizedBox(width: 12),
                   Expanded(
-                    child: _PlaceholderCard(
+                    child: FeatureCard(
+                      icon: Icons.show_chart,
                       title: 'Market prices',
                       subtitle: 'Coming soon',
-                      icon: Icons.show_chart,
                     ),
                   ),
                 ],
@@ -117,44 +142,6 @@ class DashboardTab extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _DashboardHeader extends StatelessWidget {
-  final bool isLoading;
-
-  const _DashboardHeader({required this.isLoading});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: scheme.primary.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Icon(Icons.dashboard_customize_outlined, color: scheme.primary),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Dashboard', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text(
-                isLoading ? 'Loading your farm summary…' : 'Here\'s what\'s happening today.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -271,8 +258,11 @@ class _RecentActivityCard extends StatelessWidget {
               children: [
                 Icon(Icons.history, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text('Recent activity', style: Theme.of(context).textTheme.titleMedium),
+                const Expanded(
+                  child: SectionHeader(
+                    title: 'Recent activity',
+                    subtitle: 'Latest alerts and actions',
+                  ),
                 ),
               ],
             ),
@@ -436,88 +426,6 @@ class _DashboardAlertDetailScreen extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: scheme.primary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: scheme.primary),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.bodyMedium),
-                  const SizedBox(height: 4),
-                  Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-
-  const _PlaceholderCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

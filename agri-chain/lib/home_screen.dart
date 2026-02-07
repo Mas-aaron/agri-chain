@@ -10,6 +10,7 @@ import 'package:agri_chain/screens/camera_screen.dart';
 import 'package:agri_chain/screens/results_screen.dart';
 import 'package:agri_chain/widgets/disease_card.dart';
 import 'package:agri_chain/widgets/scan_button.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool embedded;
@@ -243,60 +244,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.agriculture,
-                color: Colors.green,
-                size: 32,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                '🌽 Maize Disease\nDetector',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Detect diseases in maize leaves using AI. Scan leaves for instant diagnosis and treatment recommendations.',
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.grey[700],
-            height: 1.5,
-          ),
-        ),
-      ],
+    return const GradientHeroCard(
+      icon: Icons.spa_outlined,
+      title: 'AI Leaf Scanner',
+      subtitle: 'Detect maize diseases instantly and get treatment advice.',
     );
   }
 
   Widget _buildDiseaseInfo() {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Common Maize Diseases',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.grey[800],
-          ),
+        const SectionHeader(
+          title: 'Common maize diseases',
+          subtitle: 'Know what to look for before symptoms spread.',
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -321,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
             DiseaseCard(
               diseaseName: 'Healthy',
               severity: 'None',
-              color: Colors.green,
+              color: scheme.primary,
             ),
           ],
         ),

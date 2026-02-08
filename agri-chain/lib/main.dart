@@ -45,7 +45,7 @@ class MaizeDetectorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     const primary = Color(0xFF2E7D32);
     const primaryDark = Color(0xFF1B5E20);
-    const background = Color(0xFFF8F9FA);
+    const background = Color(0xFFF6F8F7);
 
     final colorScheme = ColorScheme.fromSeed(
       seedColor: primary,
@@ -61,6 +61,16 @@ class MaizeDetectorApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: colorScheme,
         scaffoldBackgroundColor: background,
+        
+        cardTheme: CardTheme(
+          elevation: 0,
+          color: colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+        ),
         appBarTheme: AppBarTheme(
           backgroundColor: colorScheme.surface,
           foregroundColor: colorScheme.onSurface,
@@ -92,7 +102,7 @@ class MaizeDetectorApp extends StatelessWidget {
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: Colors.white,
+          fillColor: colorScheme.surface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -106,14 +116,14 @@ class MaizeDetectorApp extends StatelessWidget {
             borderSide: BorderSide(color: colorScheme.primary, width: 2),
           ),
         ),
-        // cardTheme: CardTheme(
-        //   elevation: 0,
-        //   color: colorScheme.surface,
-        //   surfaceTintColor: colorScheme.surface,
-        //   shape: RoundedRectangleBorder(
-        //     borderRadius: BorderRadius.circular(16),
-        //   ),
-        // ),
+        chipTheme: ChipThemeData(
+          backgroundColor: colorScheme.surface,
+          selectedColor: colorScheme.primary.withOpacity(0.12),
+          side: BorderSide(color: Colors.grey.shade300),
+          labelStyle: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.w600),
+          secondaryLabelStyle: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w700),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        ),
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           selectedItemColor: colorScheme.primary,
           unselectedItemColor: colorScheme.onSurfaceVariant,

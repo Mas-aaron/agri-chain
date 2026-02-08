@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 
 import 'package:agri_chain/providers/alerts_provider.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
 
 enum _AlertsFilter { all, unread, critical }
 
@@ -28,6 +29,12 @@ class _AlertsTabState extends State<AlertsTab> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const ImageHeroCard(
+              imageUrl: 'https://picsum.photos/seed/agrichain_alerts/1200/700',
+              title: 'Alerts',
+              subtitle: 'AI insights and field notifications that need your attention.',
+            ),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

@@ -16,26 +16,26 @@ class BlockchainHubScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const GradientHeroCard(
-            icon: Icons.hub_outlined,
+          const ImageHeroCard(
+            imageUrl: 'https://picsum.photos/seed/agrichain_market/1200/700',
             title: 'Agri‑Market',
-            subtitle: 'Tokenize predicted yield into on‑chain contracts (simulation).',
+            subtitle: 'Create, buy, and track Future Harvest Contracts.',
           ),
           const SizedBox(height: 12),
-          FeatureCard(
-            icon: Icons.description_outlined,
+          ImageFeatureCard(
+            imageUrl: 'https://picsum.photos/seed/agrichain_contracts/400/400',
             title: 'Future Harvest Contracts',
-            subtitle: 'Browse and manage contracts (demo)',
+            subtitle: 'Browse listed harvest predictions and purchase securely.',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ContractsScreen()),
             ),
           ),
           const SizedBox(height: 10),
-          FeatureCard(
-            icon: Icons.history,
+          ImageFeatureCard(
+            imageUrl: 'https://picsum.photos/seed/agrichain_ledger/400/400',
             title: 'Ledger',
-            subtitle: 'Immutable event log (demo)',
+            subtitle: 'Immutable event log for contract lifecycle actions.',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const LedgerScreen()),

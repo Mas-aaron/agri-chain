@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
 
 class FieldsTab extends StatelessWidget {
   const FieldsTab({super.key});
@@ -18,10 +19,16 @@ class FieldsTab extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const ImageHeroCard(
+              imageUrl: 'https://picsum.photos/seed/agrichain_fields/1200/700',
+              title: 'Your fields',
+              subtitle: 'Track each plot, monitor location, and link alerts to fields.',
+            ),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Your fields', style: Theme.of(context).textTheme.titleLarge),
+                Text('Fields', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                 FilledButton.icon(
                   onPressed: () => _openEditor(context),
                   icon: const Icon(Icons.add),
@@ -44,31 +51,29 @@ class FieldsTab extends StatelessWidget {
               ...fields.map((f) {
                 final location = f.location.isEmpty ? 'Unknown location' : f.location;
                 final sizeText = (f.sizeHa == null) ? '' : ' • ${f.sizeHa!.toStringAsFixed(2)} ha';
-                return Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.map),
-                    title: Text(f.name),
-                    subtitle: Text('$location • ${f.crop}$sizeText'),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'edit') {
-                          _openEditor(context, existing: f);
-                        } else if (value == 'delete') {
-                          await context.read<FieldsProvider>().removeField(f.id);
-                        }
-                      },
-                      itemBuilder: (context) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(value: 'delete', child: Text('Delete')),
-                      ],
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => _FieldDetailScreen(field: f)),
-                      );
+                return ImageFeatureCard(
+                  imageUrl: 'https://picsum.photos/seed/field_${f.id}/300/300',
+                  title: f.name,
+                  subtitle: '$location • ${f.crop}$sizeText',
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'edit') {
+                        _openEditor(context, existing: f);
+                      } else if (value == 'delete') {
+                        await context.read<FieldsProvider>().removeField(f.id);
+                      }
                     },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
                   ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => _FieldDetailScreen(field: f)),
+                    );
+                  },
                 );
               }),
           ],

@@ -318,16 +318,28 @@ class DashboardTab extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              GradientHeroCard(
-                icon: Icons.dashboard_customize_outlined,
+              ImageHeroCard(
+                imageUrl: 'https://picsum.photos/seed/agrichain_dashboard/1200/700',
                 title: 'Welcome back',
-                subtitle: isLoading ? 'Loading your farm summary…' : 'Here\'s what\'s happening today.',
+                subtitle: isLoading ? 'Loading your farm summary…' : 'Monitor fields, predict yield, and sell safely.',
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
+
+              const SectionHeader(
+                title: 'Quick actions',
+                subtitle: 'Most used tools for today',
+              ),
+              const SizedBox(height: 12),
               _QuickActionsRow(),
               const SizedBox(height: 10),
               const _SecondaryActionsRow(),
-              const SizedBox(height: 14),
+              const SizedBox(height: 18),
+
+              const SectionHeader(
+                title: 'Overview',
+                subtitle: 'Your farm status at a glance',
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -347,11 +359,17 @@ class DashboardTab extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 18),
+
+              const SectionHeader(
+                title: 'Tools',
+                subtitle: 'Use AI + marketplace features',
+              ),
+              const SizedBox(height: 12),
               FeatureCard(
                 icon: Icons.auto_graph_outlined,
                 title: 'Yield forecast',
-                subtitle: 'Predict maize yield using the backend model',
+                subtitle: 'Predict maize yield using the online model',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const YieldPredictionScreen()),
@@ -361,7 +379,7 @@ class DashboardTab extends StatelessWidget {
               FeatureCard(
                 icon: Icons.storefront_outlined,
                 title: 'Agri‑Market',
-                subtitle: 'Tokenize yield into Future Harvest Contracts (simulation)',
+                subtitle: 'Create, buy, and track Future Harvest Contracts',
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const BlockchainHubScreen()),
@@ -381,7 +399,8 @@ class DashboardTab extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
+
               _RecentActivityCard(
                 alerts: alerts.take(6).toList(),
                 formatTime: _formatTime,

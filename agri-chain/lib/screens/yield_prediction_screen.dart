@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:agri_chain/services/yield_api_service.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
 
 class YieldPredictionScreen extends StatefulWidget {
   const YieldPredictionScreen({super.key});
@@ -149,6 +150,12 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          const ImageHeroCard(
+            imageUrl: 'https://picsum.photos/seed/agrichain_yield/1200/700',
+            title: 'Yield forecast',
+            subtitle: 'Estimate harvest output using your seasonal field conditions.',
+          ),
+          const SizedBox(height: 12),
           if (_error != null) ...[
             Card(
               child: Padding(

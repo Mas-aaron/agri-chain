@@ -244,8 +244,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
-    return const GradientHeroCard(
-      icon: Icons.spa_outlined,
+    return const ImageHeroCard(
+      imageUrl: 'https://picsum.photos/seed/agrichain_scan/1200/700',
       title: 'AI Leaf Scanner',
       subtitle: 'Detect maize diseases instantly and get treatment advice.',
     );

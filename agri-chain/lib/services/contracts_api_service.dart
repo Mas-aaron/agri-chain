@@ -1,0 +1,279 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+class ContractCreateRequest {
+  final String crop;
+  final double quantityKg;
+  final double unitPrice;
+  final String currency;
+  final String farmerName;
+  final String? evidenceHash;
+
+  const ContractCreateRequest({
+    this.crop = 'Maize',
+    required this.quantityKg,
+    required this.unitPrice,
+    this.currency = 'UGX',
+    required this.farmerName,
+    this.evidenceHash,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'crop': crop,
+        'quantity_kg': quantityKg,
+        'unit_price': unitPrice,
+        'currency': currency,
+        'farmer_name': farmerName,
+        if (evidenceHash != null) 'evidence_hash': evidenceHash,
+      };
+}
+
+class ContractPurchaseRequest {
+  final String buyerName;
+
+  const ContractPurchaseRequest({required this.buyerName});
+
+  Map<String, dynamic> toJson() => {
+        'buyer_name': buyerName,
+      };
+}
+
+class ContractDeliverRequest {
+  final String actor;
+  final String? ref;
+
+  const ContractDeliverRequest({required this.actor, this.ref});
+
+  Map<String, dynamic> toJson() => {
+        'actor': actor,
+        if (ref != null) 'ref': ref,
+      };
+}
+
+class YieldContractDto {
+  final String id;
+  final String crop;
+  final double quantityKg;
+  final double unitPrice;
+  final String currency;
+  final String status;
+  final String farmerName;
+  final String? buyerName;
+  final String? evidenceHash;
+  final DateTime createdAt;
+
+  const YieldContractDto({
+    required this.id,
+    required this.crop,
+    required this.quantityKg,
+    required this.unitPrice,
+    required this.currency,
+    required this.status,
+    required this.farmerName,
+    required this.buyerName,
+    required this.evidenceHash,
+    required this.createdAt,
+  });
+
+  double get total => quantityKg * unitPrice;
+
+  factory YieldContractDto.fromJson(Map<String, dynamic> json) {
+    final qtyRaw = json['quantity_kg'];
+    final unitRaw = json['unit_price'];
+    final createdRaw = json['created_at'];
+
+    return YieldContractDto(
+      id: (json['id'] ?? '').toString(),
+      crop: (json['crop'] ?? '').toString(),
+      quantityKg: qtyRaw is num ? qtyRaw.toDouble() : double.tryParse('$qtyRaw') ?? 0,
+      unitPrice: unitRaw is num ? unitRaw.toDouble() : double.tryParse('$unitRaw') ?? 0,
+      currency: (json['currency'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      farmerName: (json['farmer_name'] ?? '').toString(),
+      buyerName: json['buyer_name'] == null ? null : (json['buyer_name']).toString(),
+      evidenceHash: json['evidence_hash'] == null ? null : (json['evidence_hash']).toString(),
+      createdAt: DateTime.tryParse('$createdRaw') ?? DateTime.now(),
+    );
+  }
+}
+
+class LedgerEventDto {
+  final String id;
+  final DateTime time;
+  final String action;
+  final String actor;
+  final String contractId;
+  final Map<String, String> meta;
+
+  const LedgerEventDto({
+    required this.id,
+    required this.time,
+    required this.action,
+    required this.actor,
+    required this.contractId,
+    required this.meta,
+  });
+
+  factory LedgerEventDto.fromJson(Map<String, dynamic> json) {
+    final tRaw = json['time'];
+    final metaRaw = json['meta'];
+
+    final meta = <String, String>{};
+    if (metaRaw is Map) {
+      for (final e in metaRaw.entries) {
+        meta['${e.key}'] = '${e.value}';
+      }
+    }
+
+    return LedgerEventDto(
+      id: (json['id'] ?? '').toString(),
+      time: DateTime.tryParse('$tRaw') ?? DateTime.now(),
+      action: (json['action'] ?? '').toString(),
+      actor: (json['actor'] ?? '').toString(),
+      contractId: (json['contract_id'] ?? '').toString(),
+      meta: meta,
+    );
+  }
+}
+
+class ContractsApiService {
+  final Uri baseUri;
+
+  const ContractsApiService(this.baseUri);
+
+  static Uri _normalizeBaseUrl(String baseUrl) {
+    final trimmed = baseUrl.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('baseUrl is empty');
+    }
+    return Uri.parse(trimmed);
+  }
+
+  factory ContractsApiService.fromBaseUrl(String baseUrl) {
+    return ContractsApiService(_normalizeBaseUrl(baseUrl));
+  }
+
+  Uri _url(String path, {Map<String, String>? query}) {
+    return baseUri.replace(
+      path: baseUri.path.endsWith('/')
+          ? '${baseUri.path}${path.startsWith('/') ? path.substring(1) : path}'
+          : '${baseUri.path}${path.startsWith('/') ? path : '/$path'}',
+      queryParameters: query,
+    );
+  }
+
+  Future<List<YieldContractDto>> listContracts({String? status}) async {
+    final resp = await http.get(
+      _url('/contracts', query: status == null ? null : {'status': status}),
+      headers: const {
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (resp.statusCode >= 400) {
+      throw Exception('Failed to load contracts (${resp.statusCode})');
+    }
+
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! List) {
+      throw Exception('Invalid contracts response');
+    }
+
+    return decoded
+        .whereType<Map>()
+        .map((e) => YieldContractDto.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+
+  Future<YieldContractDto> createContract(ContractCreateRequest request) async {
+    final resp = await http.post(
+      _url('/contracts'),
+      headers: const {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (resp.statusCode >= 400) {
+      throw Exception('Failed to create contract (${resp.statusCode})');
+    }
+
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) {
+      throw Exception('Invalid create contract response');
+    }
+
+    return YieldContractDto.fromJson(decoded.cast<String, dynamic>());
+  }
+
+  Future<YieldContractDto> purchaseContract(String contractId, ContractPurchaseRequest request) async {
+    final resp = await http.post(
+      _url('/contracts/$contractId/purchase'),
+      headers: const {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (resp.statusCode >= 400) {
+      throw Exception('Failed to purchase contract (${resp.statusCode})');
+    }
+
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) {
+      throw Exception('Invalid purchase response');
+    }
+
+    return YieldContractDto.fromJson(decoded.cast<String, dynamic>());
+  }
+
+  Future<YieldContractDto> deliverContract(String contractId, ContractDeliverRequest request) async {
+    final resp = await http.post(
+      _url('/contracts/$contractId/deliver'),
+      headers: const {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(request.toJson()),
+    );
+
+    if (resp.statusCode >= 400) {
+      throw Exception('Failed to deliver contract (${resp.statusCode})');
+    }
+
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) {
+      throw Exception('Invalid deliver response');
+    }
+
+    return YieldContractDto.fromJson(decoded.cast<String, dynamic>());
+  }
+
+  Future<List<LedgerEventDto>> listLedger({String? contractId, int limit = 100}) async {
+    final query = <String, String>{'limit': '$limit'};
+    if (contractId != null && contractId.trim().isNotEmpty) {
+      query['contract_id'] = contractId.trim();
+    }
+
+    final resp = await http.get(
+      _url('/ledger', query: query),
+      headers: const {
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (resp.statusCode >= 400) {
+      throw Exception('Failed to load ledger (${resp.statusCode})');
+    }
+
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! List) {
+      throw Exception('Invalid ledger response');
+    }
+
+    return decoded
+        .whereType<Map>()
+        .map((e) => LedgerEventDto.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+}

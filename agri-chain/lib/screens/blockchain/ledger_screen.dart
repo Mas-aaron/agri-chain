@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:agri_chain/services/contracts_api_service.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
+
 class LedgerEvent {
   final String id;
   final DateTime time;
@@ -18,37 +21,29 @@ class LedgerEvent {
   });
 }
 
-class LedgerScreen extends StatelessWidget {
+class LedgerScreen extends StatefulWidget {
   const LedgerScreen({super.key});
 
-  List<LedgerEvent> _demo() {
-    final now = DateTime.now();
-    return [
-      LedgerEvent(
-        id: 'L-${now.millisecondsSinceEpoch - 30000}',
-        time: now.subtract(const Duration(days: 2, hours: 4)),
-        action: 'MINT_AND_LIST',
-        actor: 'Kato Farms',
-        contractId: 'FH-${now.millisecondsSinceEpoch - 10000}',
-        meta: const {'proof': 'obsHash: ***'},
-      ),
-      LedgerEvent(
-        id: 'L-${now.millisecondsSinceEpoch - 25000}',
-        time: now.subtract(const Duration(days: 1, hours: 2)),
-        action: 'PURCHASE',
-        actor: 'GreenMart Exporters',
-        contractId: 'FH-${now.millisecondsSinceEpoch - 15000}',
-        meta: const {'amount': '945000 UGX'},
-      ),
-      LedgerEvent(
-        id: 'L-${now.millisecondsSinceEpoch - 20000}',
-        time: now.subtract(const Duration(hours: 6)),
-        action: 'DELIVERY_RECORDED',
-        actor: 'Logistics',
-        contractId: 'FH-${now.millisecondsSinceEpoch - 10000}',
-        meta: const {'ref': 'LOG-00021'},
-      ),
-    ];
+  @override
+  State<LedgerScreen> createState() => _LedgerScreenState();
+}
+
+class _LedgerScreenState extends State<LedgerScreen> {
+  static const _defaultApiBaseUrl = 'http://10.0.2.2:8000';
+  late final ContractsApiService _api;
+  late Future<List<LedgerEventDto>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = ContractsApiService.fromBaseUrl(_defaultApiBaseUrl);
+    _future = _api.listLedger();
+  }
+
+  void _reload() {
+    setState(() {
+      _future = _api.listLedger();
+    });
   }
 
   IconData _iconFor(String action) {
@@ -61,62 +56,153 @@ class LedgerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = _demo();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Ledger'),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, i) {
-          final e = items[i];
-          return Card(
-            child: Padding(
+      body: FutureBuilder<List<LedgerEventDto>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return ListView(
               padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Icon(_iconFor(e.action), color: Theme.of(context).colorScheme.primary),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
+              children: const [
+                ImageHeroCard(
+                  imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                  title: 'Ledger',
+                  subtitle: 'Track immutable contract events and status changes.',
+                ),
+                SizedBox(height: 16),
+                Center(child: CircularProgressIndicator()),
+              ],
+            );
+          }
+          if (snapshot.hasError) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const ImageHeroCard(
+                  imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                  title: 'Ledger',
+                  subtitle: 'Track immutable contract events and status changes.',
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          e.action,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                          'Could not load ledger',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                        const SizedBox(height: 4),
-                        Text('Actor: ${e.actor}', style: Theme.of(context).textTheme.bodySmall),
-                        Text('Contract: ${e.contractId}', style: Theme.of(context).textTheme.bodySmall),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: e.meta.entries
-                              .map(
-                                (kv) => Chip(
-                                  label: Text('${kv.key}: ${kv.value}'),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              )
-                              .toList(growable: false),
+                        const SizedBox(height: 6),
+                        Text('${snapshot.error}', style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
                         ),
                       ],
                     ),
                   ),
+                ),
+              ],
+            );
+          }
+
+          final items = snapshot.data ?? const [];
+          if (items.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () async => _reload(),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: const [
+                  ImageHeroCard(
+                    imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                    title: 'Ledger',
+                    subtitle: 'Track immutable contract events and status changes.',
+                  ),
+                  SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No ledger events yet. Create a contract first.'),
+                    ),
+                  ),
                 ],
               ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async => _reload(),
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: items.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                if (i == 0) {
+                  return const ImageHeroCard(
+                    imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                    title: 'Ledger',
+                    subtitle: 'Track immutable contract events and status changes.',
+                  );
+                }
+
+                final e = items[i - 1];
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(_iconFor(e.action), color: Theme.of(context).colorScheme.primary),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                e.action,
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                              const SizedBox(height: 4),
+                              Text('Actor: ${e.actor}', style: Theme.of(context).textTheme.bodySmall),
+                              Text('Contract: ${e.contractId}', style: Theme.of(context).textTheme.bodySmall),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: e.meta.entries
+                                    .map(
+                                      (kv) => Chip(
+                                        label: Text('${kv.key}: ${kv.value}'),
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           );
         },

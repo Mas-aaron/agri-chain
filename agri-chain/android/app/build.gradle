@@ -24,7 +24,7 @@ android {
 
     defaultConfig {
         applicationId "com.example.agri_chain"
-        minSdk 23                           // 23 required for firebase_storage
+        minSdkVersion flutter.minSdkVersion                           // 23 required for firebase_storage
         targetSdk 34
         versionCode flutter.versionCode
         versionName flutter.versionName

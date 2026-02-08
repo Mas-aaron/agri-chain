@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:agri_chain/services/contracts_api_service.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
+
 class YieldContract {
   final String id;
   final String crop;
@@ -22,40 +25,29 @@ class YieldContract {
   double get total => quantityKg * unitPrice;
 }
 
-class ContractsScreen extends StatelessWidget {
+class ContractsScreen extends StatefulWidget {
   const ContractsScreen({super.key});
 
-  List<YieldContract> _demo() {
-    final now = DateTime.now();
-    return [
-      YieldContract(
-        id: 'FH-${now.millisecondsSinceEpoch - 20000}',
-        crop: 'Maize',
-        quantityKg: 1500,
-        unitPrice: 1200,
-        currency: 'UGX',
-        status: 'LISTED',
-        createdAt: now.subtract(const Duration(hours: 8)),
-      ),
-      YieldContract(
-        id: 'FH-${now.millisecondsSinceEpoch - 15000}',
-        crop: 'Maize',
-        quantityKg: 900,
-        unitPrice: 1050,
-        currency: 'UGX',
-        status: 'PURCHASED',
-        createdAt: now.subtract(const Duration(days: 1, hours: 2)),
-      ),
-      YieldContract(
-        id: 'FH-${now.millisecondsSinceEpoch - 10000}',
-        crop: 'Maize',
-        quantityKg: 600,
-        unitPrice: 1300,
-        currency: 'UGX',
-        status: 'DELIVERED',
-        createdAt: now.subtract(const Duration(days: 2, hours: 4)),
-      ),
-    ];
+  @override
+  State<ContractsScreen> createState() => _ContractsScreenState();
+}
+
+class _ContractsScreenState extends State<ContractsScreen> {
+  static const _defaultApiBaseUrl = 'http://10.0.2.2:8000';
+  late final ContractsApiService _api;
+  late Future<List<YieldContractDto>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = ContractsApiService.fromBaseUrl(_defaultApiBaseUrl);
+    _future = _api.listContracts();
+  }
+
+  void _reload() {
+    setState(() {
+      _future = _api.listContracts();
+    });
   }
 
   Color _statusColor(BuildContext context, String status) {
@@ -68,63 +60,237 @@ class ContractsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = _demo();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Contracts'),
+        actions: [
+          IconButton(
+            tooltip: 'Create contract (Farmer demo)',
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: () async {
+              try {
+                await _api.createContract(
+                  const ContractCreateRequest(
+                    crop: 'Maize',
+                    quantityKg: 1000,
+                    unitPrice: 1200,
+                    currency: 'UGX',
+                    farmerName: 'Demo Farmer',
+                  ),
+                );
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contract created')));
+                _reload();
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Create failed: $e')));
+              }
+            },
+          ),
+        ],
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, i) {
-          final c = items[i];
-          final color = _statusColor(context, c.status);
-
-          return Card(
-            child: Padding(
+      body: FutureBuilder<List<YieldContractDto>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return ListView(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          c.id,
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              children: [
+                ImageHeroCard(
+                  imageUrl: 'https://picsum.photos/seed/agrichain_contracts_header/1200/700',
+                  title: 'Future harvest contracts',
+                  subtitle: 'List your predicted harvest or purchase securely.',
+                ),
+                const SizedBox(height: 16),
+                const Center(child: CircularProgressIndicator()),
+              ],
+            );
+          }
+          if (snapshot.hasError) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                ImageHeroCard(
+                  imageUrl: 'https://picsum.photos/seed/agrichain_contracts_header/1200/700',
+                  title: 'Future harvest contracts',
+                  subtitle: 'List your predicted harvest or purchase securely.',
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Could not load contracts',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.10),
-                          borderRadius: BorderRadius.circular(999),
+                        const SizedBox(height: 6),
+                        Text('${snapshot.error}', style: Theme.of(context).textTheme.bodySmall),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
                         ),
-                        child: Text(
-                          c.status,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final items = snapshot.data ?? const [];
+          if (items.isEmpty) {
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                ImageHeroCard(
+                  imageUrl: 'https://picsum.photos/seed/agrichain_contracts_header/1200/700',
+                  title: 'Future harvest contracts',
+                  subtitle: 'List your predicted harvest or purchase securely.',
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No contracts yet',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        Text(
+                          'Tap + to create your first harvest listing. Buyers will see it here.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(child: _kv(context, 'Crop', c.crop)),
-                      Expanded(child: _kv(context, 'Qty', '${c.quantityKg.toStringAsFixed(0)} kg')),
-                    ],
+                ),
+              ],
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              _reload();
+            },
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: items.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                if (i == 0) {
+                  return ImageHeroCard(
+                    imageUrl: 'https://picsum.photos/seed/agrichain_contracts_header/1200/700',
+                    title: 'Future harvest contracts',
+                    subtitle: 'List your predicted harvest or purchase securely.',
+                  );
+                }
+
+                final c = items[i - 1];
+                final color = _statusColor(context, c.status);
+
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                c.id,
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.10),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                c.status,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(color: color, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(child: _kv(context, 'Crop', c.crop)),
+                            Expanded(child: _kv(context, 'Qty', '${c.quantityKg.toStringAsFixed(0)} kg')),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(child: _kv(context, 'Unit price', '${c.unitPrice.toStringAsFixed(0)} ${c.currency}')),
+                            Expanded(child: _kv(context, 'Total', '${c.total.toStringAsFixed(0)} ${c.currency}')),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (c.status.toUpperCase() == 'LISTED')
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  try {
+                                    await _api.purchaseContract(
+                                      c.id,
+                                      const ContractPurchaseRequest(buyerName: 'Demo Buyer'),
+                                    );
+                                    if (!context.mounted) return;
+                                    _reload();
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Purchase failed: $e')));
+                                  }
+                                },
+                                icon: const Icon(Icons.shopping_cart_outlined),
+                                label: const Text('Purchase'),
+                              ),
+                            if (c.status.toUpperCase() == 'PURCHASED')
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  try {
+                                    await _api.deliverContract(
+                                      c.id,
+                                      const ContractDeliverRequest(actor: 'Logistics', ref: 'DEL-0001'),
+                                    );
+                                    if (!context.mounted) return;
+                                    _reload();
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deliver failed: $e')));
+                                  }
+                                },
+                                icon: const Icon(Icons.local_shipping_outlined),
+                                label: const Text('Mark delivered'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(child: _kv(context, 'Unit price', '${c.unitPrice.toStringAsFixed(0)} ${c.currency}')),
-                      Expanded(child: _kv(context, 'Total', '${c.total.toStringAsFixed(0)} ${c.currency}')),
-                    ],
-                  ),
-                ],
-              ),
+                );
+              },
             ),
           );
         },

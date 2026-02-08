@@ -1,0 +1,140 @@
+
+
+
+Huawei ICT Competition 2025–2026 Innovation Competition
+
+Entry Information Form
+Team Information
+University Name	MOUNTAINS OF THE MOON UNIVERSITY
+Team Name	AgriChain
+Team Members	Instructor (1 person)	Students (Up to 3 persons)
+	Feta Jonathan	Okoo Elvis	Wasswa Atibu	Masendi Aaron
+Team Captain Tel	+256783876390
+Team Captain Email	masendiaaron6@gmail.com
+Team Group Photo	Please provide one team photo of about 2 MB in size
+ 
+
+Entry Information
+Topic	Topic 1: Developing AI innovation applications powered by MindSpore
+Entry Name	Agri-Chain 
+Applicable Fields	(Including but not limited to finance, transportation, energy, education, healthcare, agriculture, and public welfare)
+Agri-Chain project aims to transform Agriculture in Africa and beyond
+Technologies Used	Huawei AI-related technologies (Such as MindSpore, CANN, AIoT22222222, and ModelArts)
+Huawei Technologies used include.
+•	MindSpore (AI development framework)
+•	ModelArts (AI platform for training/deployment)
+•	Huawei Blockchain Services (BCS)
+•	Ascend AI Processors (for accelerated inference)
+•	Huawei Cloud (OBS, ECS, RDS for scalable infrastructure)
+•	HMS Core (for mobile app integration)
+Entry Introduction	1.	Please describe the background and value of your project, such as the scenarios it applies to and the real-world issues it can resolve. (Up to 500 words)
+Project Title: Agri-Chain: AI-Driven Sustainable Agriculture Ecosystem for Smallholder Farmers
+Project Background and Real-World Issues
+Across Africa, agriculture employs over 60% of the population, yet the sector is plagued by systemic inefficiencies that perpetuate food insecurity and poverty. Smallholder farmers—the backbone of African agriculture, numbering over 250 million—face three critical, interlinked challenges:
+
+1.	Climate Vulnerability and Unpredictable Yields: Climate variability, leading to unpredictable rainfall and increased pest outbreaks, results in significant yield fluctuations (up to 40% in regions like Uganda). Farmers lack data-driven tools for proactive decision-making.
+2.	Significant Post-Harvest Losses: Losses frequently exceed 30% due to poor storage, inefficient logistics, and a mismatch between supply and demand.
+3.	Financial Exclusion and Exploitative Markets: Eighty percent of small-holder farmers lack access to formal credit. They are trapped by exploitative middlemen, receiving as little as 10-20% of the final consumer price, while informal lenders charge exorbitant interest rates (25-40% APR).
+These issues create a cycle of poverty and uncertainty, hindering economic development and food security across the continent.
+
+Value Proposition and Application Scenarios
+Agri-Chain represents a transformative solution that bridges these gaps through an integrated AI and blockchain ecosystem, specifically targeting the smallholder farmer scenario. Our platform offers value across three primary dimensions:
+
+1. Climate Resilience and Yield Optimization (The Farm Scenario):
+Agri-Chain's AI field analyst, powered by Huawei's Ascend AI and MindSpore, processes multispectral drone and satellite data. In a real-world scenario, a farmer in Uganda receives an alert on their mobile app: "Nitrogen deficiency detected in Field 3, area A1." This detection occurs weeks before visible symptoms. The farmer applies fertilizer precisely where needed, leading to proactive interventions that reduce crop losses by 20% and increase average yields by 25-30%. This optimizes input use, reducing fertilizer and water waste by 25%.
+
+2. Financial Inclusion and Risk Mitigation (The Bank/Financing Scenario):
+The platform’s most innovative value lies in transforming AI-verified yield predictions into bankable assets. In this scenario, the AI forecasts 5 tons of maize with 95% confidence. This prediction is tokenized into a "Future Harvest Contract" on Huawei BCS. A local bank or cooperative can now confidently accept this smart contract as collateral for a loan, enabling the farmer’s access to affordable credit (12-18% APR). This directly addresses the massive financing gap and mitigates risk for financial institutions.
+
+3. Market Efficiency and Supply Chain Transparency (The Marketplace Scenario):
+By connecting farmers directly with vetted buyers through the transparent blockchain marketplace, Agri-Chain eliminates exploitative middlemen who typically capture 40-60% of the value chain. Smart contracts guarantee payments upon delivery verification, building vital trust. This directly increases farmer incomes by 30-50%, ensuring a fairer distribution of value and providing buyers with a reliable, quality-assured supply.
+Agri-Chain focuses initially on maize—a staple for 300 million Africans—offering a scalable, impactful, and sustainable solution that transforms data into prosperity for millions.
+
+
+
+2.	Please explain the innovative aspects of your project, such as innovation in algorithms and AI application scenarios (Up to 1,000 words).
+The Explanation of the Innovative Aspects of the Project
+The Agri-Chain project presents innovation across algorithms, AI application scenarios, and system architecture by integrating Huawei's full-stack technologies to address systemic inefficiencies in the agricultural supply chain.
+
+A. Innovation in AI Application Scenarios
+Agri-Chain redefines AI application in agriculture by linking predictive insights directly to market mechanisms, creating a seamless farm-to-fork ecosystem.
+•	Proactive, Pre-symptom Disease and Stress Detection: Traditional methods often rely on manual inspection or RGB images, identifying problems only after visual symptoms appear, by which time yield loss is often significant (up to 40% in some cases). Our innovation lies in the use of multispectral imagery (specifically Red-Edge and Near-Infrared bands from Sentinel-2 satellite and drone APIs) to detect changes in plant spectral reflectance caused by nitrogen deficiency or early disease onset before they are visible to the human eye. The AI-Predictive Field Analyst acts as an early warning system, enabling preventative intervention that drastically reduces crop loss.
+•	AI-Guaranteed "Future Harvest" Contracts: The core innovation in the application scenario is the integration of AI-driven yield forecasts with a transactional marketplace. The AI model's output (predicted volume and quality) is tokenized into secure, non-fungible smart contracts on the Huawei Cloud Blockchain Service (BCS). This is a novel scenario where a machine learning prediction directly underpins a financial instrument. It removes information asymmetry between farmers and buyers, guaranteeing supply volume for buyers and fair prices upfront for farmers, reducing risk for all parties.
+•	End-to-End Traceability and Trust: By logging every step of the product journey—from AI-monitored planting conditions to harvest data, processing, and transport—onto an immutable blockchain ledger, consumers can scan a QR code to access verifiable origin and sustainability data. This enhances consumer trust and combats food fraud.
+B. Algorithmic Innovation and Huawei Tech Stack Integration
+We leverage advanced deep learning techniques and optimize them using the Huawei technology stack for maximum efficiency and scalability.
+•	Optimized Multi-Modal CNN for Imagery:
+o	Architecture: Module 1 employs a Convolutional Neural Network (CNN) specifically designed to ingest and interpret multi-spectral bands (RGB, Red-Edge, NIR). The model integrates attention mechanisms to focus on relevant lesion features within complex field backgrounds, the proposed CNN architecture is designed to achieve accuracy levels comparable to state-of-the-art maize disease classification systems reported in recent agricultural AI research, while remaining lightweight enough for scalable cloud and potential edge deployment.
+o	Huawei Optimization: We use MindSpore, Huawei's all-scenario AI computing framework, which is designed for software-hardware co-optimization with Ascend AI Processors. This combination dramatically speeds up model training and inference. For example, in typical ResNet-50 training, the Ascend 910 with MindSpore has been shown to be about two times faster than mainstream alternatives, allowing us to rapidly analyze vast amounts of satellite data.
+•	Phased Neural Network Approach (DNN to RNN):
+o	Algorithmic Strategy: Module 2 employs a pragmatic, two-phase algorithmic strategy. Phase 1 uses a Deep Neural Network (DNN) for initial yield prediction based on aggregated seasonal data (e.g., average temp, total rain). This is a robust starting point. Phase 2 transitions to a Recurrent Neural Network (RNN) that leverages true daily or weekly time-series sensor/weather data. RNNs are superior for capturing temporal dependencies and long-term climate trends, leading to more accurate predictions than static DNNs can provide with aggregated data. This phased approach demonstrates a clear, scalable technical roadmap.
+o	MindSpore Flexibility: MindSpore natively supports both CNN and RNN/LSTM architectures and simplifies the complex configuration required for distributed parallel training, allowing developers to implement these sophisticated model ideas efficiently.
+C. Systemic and Ecosystem Innovation
+Agri-Chain is fundamentally a "nexus" model that connects previously fragmented silos of data and stakeholders.
+•	Blockchain as a Trust Layer: The use of a permissioned consortium blockchain (Huawei BCS) provides an immutable, shared source of truth across the supply chain (farmers, buyers, logistics). Smart contracts automate payments upon delivery verification, ensuring farmers receive timely compensation, which is a major pain point in traditional systems.
+•	Data Security and Storage Optimization: To address the challenge of storing massive volumes of imagery and sensor data on a blockchain (which has scalability limitations), we use a hybrid storage model. Large data files (images, sensor logs) are stored off chain in the scalable Huawei Cloud OBS (Object Storage Service), while only their unique cryptographic hashes are recorded on the blockchain ledger via smart contracts. This maintains data integrity and security without burdening the chain's storage capacity.
+•	Scalability via Huawei Cloud: The entire system is built on the scalable infrastructure of Huawei Cloud ECS, RDS, and OBS, ensuring that the platform can grow from a local pilot program to supporting large-scale agricultural operations globally. HMS Core enables seamless integration into mobile apps, providing a user-friendly interface for farmers.
+In conclusion, Agri-Chain innovates by creating a fully integrated, AI-driven, and blockchain-secured platform that addresses the entire agricultural value chain, leveraging Huawei's deep technology stack to deliver unprecedented transparency, efficiency, and fairness from farm to consumer.
+
+
+
+
+
+Technical Solution Introduction	1.	Introduce the overall technical solution, with optional illustrations such as a technical architecture diagram.
+
+ The Agri-Chain platform is built on a six-layer modular architecture designed for scalability, resilience and real-world impact on the African Agricultural sector as shown in the diagram. As illustrated in the diagram, the data flows from foundational infrastructure to create actionable intelligence, which is delivered to the users via multiple access channels like the Mobile, USSD and Web platforms.
+
+Agri-Chain Design 
+
+1.	Bottom-Up Data Flow: Raw multi-source data (satellite, ground sensors, field images) is ingested and processed through successive layers of intelligence.
+2.	AI-First Core: The system's intelligence is driven by our proprietary Two-Stage Early Warning System, which combines pre-symptomatic detection with visual disease diagnosis.
+3.	Trust Through Blockchain: Verified AI predictions are tokenized into "Future Harvest Contracts" on Huawei's Blockchain Service (BCS), creating bankable assets for farmers.
+4.	Inclusive by Design: The presentation layer ensures accessibility for all farmers—from USSD/SMS for feature phones to full mobile apps for smartphone users.
+5.	Full Huawei Stack Utilization: Each layer leverages specific Huawei Cloud technologies (MindSpore, ModelArts, BCS, HMS Core) for optimized performance and integration.
+This architecture enables Agri-Chain to transform fragmented agricultural data into a seamless ecosystem that increases yields, reduces losses, and connects smallholder farmers directly to fair markets.
+
+
+
+2.	Introduce key technical modules, such as dataset selection and data processing, and interpretation of key code snippets (such as model implementation, training, inference, and deployment).
+Agri-Chain integrates three core modules into a seamless platform:
+3.	Module 1: The AI-Predictive Field Analyst (CNN-based)
+a)	Function: This module uses a Convolutional Neural Network (CNN) built with MindSpore and machine learning to analyze captured images, multi-source imagery (multispectral satellite via Sentinel-2 API, and high-resolution drone/UAV imagery). It processes spectral bands (Red-Edge, NIR, RGB) to identify subtle stress signatures and the captured images for diagnosis
+
+b)	Output: The system delivers actionable alerts to farmers' on mobile apps and SMS alerts to farmers without smart phones for early detection of stressors, including specific maize diseases (e.g., Northern Leaf Blight, Gray Leaf Spot, Common Rust) and nitrogen deficiency, weeks before visible symptoms appear. This uses specific public datasets like the "Annotated image classification dataset" for training the CNN model and the CV4A datasets.
+Key code snippets 
+ 
+ 
+4.	Module 2: The Yield & Quality Intelligence Engine (DNN/RNN-based)
+a)	Function: This engine correlates the field analysis data (disease presence) with local weather forecasts and historical yield/soil data using a neural network built on MindSpore.
+b)	Model Phasing:
+i.	MVP (Phase 1): A Deep Neural Network (DNN) model will use aggregated seasonal data (from the "AgriYield" Kaggle dataset: average temp, total rainfall, soil pH) to establish baseline yield predictions.
+ii.	Future (Phase 2): We upgrade to a Recurrent Neural Network (RNN) using time-series data (e.g., daily sensor/weather data from the "Smart Farming Sensor Data" dataset) to improve forecasting accuracy by modeling temporal dynamics.
+c)	Output: A high-fidelity forecast of the harvest's volume, optimal harvest window, and even quality metrics (e.g., protein content).
+5.	Module 3: The Blockchain-Powered Agri-Market (Huawei BCS)
+a)	Function: The AI-predicted yield is tokenized into "Future Harvest Contracts" using smart contracts on the Huawei Cloud Blockchain Service (BCS). Each token represents a specific quantity and quality of produce.
+b)	Output: A transparent marketplace where verified buyers (exporters, supermarkets) can purchase future contracts directly from farmers, guaranteeing a fair price upfront and reducing waste by matching supply and demand accurately. 
+Code snippet  
+
+6.	Introduce the final achievements of the solution. Provide measurable metrics, such as accuracy, inference throughput, and expected cost reduction.
+AI model performance and technical performance:
+    AI predictive field analyst will achieve more than 97% accuracy  
+For Farmers:
+a)	Increased Yield & Quality: Up to 20% reduction in crop loss through early disease and stress detection.
+b)	Increased Income: Up to 30% higher revenue through direct sales and price certainly via future contracts and eliminating the middlemen.
+For Buyers & Society:
+c)	Reduced Food Waste: Up to 50% reduction in pre-market waste due to accurate demand matching.
+d)	Sustainability: Directly addresses UN Sustainable Development Goals (SDGs) #2 (Zero Hunger) and #12 (Responsible Consumption and Production), as food waste is widely recognized as a significant contributor to global greenhouse gas emissions, making waste reduction a critical sustainability objective. 
+ For the Community
+a)	It is a source of employment to community members, for example individuals who work as independent verifiers get employment opportunities through the platform.
+
+
+
+
+
+Entry Demonstration	Including but not limited to photos, videos (which may be uploaded separately as attachments), and web links.
+Our demonstration shows how Agri-Chain transforms the Agricultural value chain for small holder farmers through an integrated AI and Blockchain ecosystem. The video can be accessed through this link.
+
+
+
+
+

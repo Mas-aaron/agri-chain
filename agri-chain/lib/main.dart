@@ -6,6 +6,7 @@ import 'package:agri_chain/services/tflite_service.dart';
 import 'package:agri_chain/providers/scan_provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
+import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +17,7 @@ void main() async {
     // Continue without Firebase if not configured
     // print('Firebase init failed: $e');
   }
-  
+
   // Initialize TFLite service (do not block app startup on failure)
   final tfliteService = TFLiteService();
   try {
@@ -24,7 +25,7 @@ void main() async {
   } catch (e) {
     // Continue to app UI; service can retry later when needed
   }
-  
+
   runApp(
     MultiProvider(
       providers: [
@@ -32,6 +33,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ScanProvider()),
         ChangeNotifierProvider(create: (_) => FieldsProvider()),
         ChangeNotifierProvider(create: (_) => AlertsProvider()),
+        ChangeNotifierProvider(create: (_) => BlockchainProvider()),
       ],
       child: const MaizeDetectorApp(),
     ),
@@ -88,7 +90,8 @@ class MaizeDetectorApp extends StatelessWidget {
             backgroundColor: primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -96,7 +99,8 @@ class MaizeDetectorApp extends StatelessWidget {
             backgroundColor: primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
@@ -134,7 +138,9 @@ class MaizeDetectorApp extends StatelessWidget {
           indicatorColor: colorScheme.primary.withOpacity(0.12),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             return TextStyle(
-              fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w600,
+              fontWeight: states.contains(WidgetState.selected)
+                  ? FontWeight.w700
+                  : FontWeight.w600,
               fontSize: 12,
               color: states.contains(WidgetState.selected)
                   ? colorScheme.primary

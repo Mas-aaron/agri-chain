@@ -4,6 +4,7 @@ import 'package:agri_chain/screens/tabs/alerts_tab.dart';
 import 'package:agri_chain/screens/tabs/dashboard_tab.dart';
 import 'package:agri_chain/screens/tabs/fields_tab.dart';
 import 'package:agri_chain/screens/tabs/settings_tab.dart';
+// Removed direct blockchain nav entry; access via Dashboard only
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});

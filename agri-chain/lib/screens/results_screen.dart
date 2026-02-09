@@ -174,7 +174,7 @@ class ResultsScreen extends StatelessWidget {
             percentage: _asDouble(pred['percentage']),
             isTop: predictions.indexOf(pred) == 0,
           );
-        }).toList(),
+        }),
       ],
     );
   }

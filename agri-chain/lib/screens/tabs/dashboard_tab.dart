@@ -170,6 +170,33 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
     return 'Weather';
   }
 
+  IconData _iconForCode(int code) {
+    if (code == 0) return Icons.wb_sunny_outlined;
+    if (code == 1 || code == 2) return Icons.cloud_outlined;
+    if (code == 3) return Icons.cloud;
+    if (code == 45 || code == 48) return Icons.foggy;
+    if (code >= 51 && code <= 57) return Icons.grain_outlined;
+    if (code >= 61 && code <= 67) return Icons.umbrella_outlined;
+    if (code >= 71 && code <= 77) return Icons.ac_unit;
+    if (code >= 80 && code <= 82) return Icons.water_drop_outlined;
+    if (code >= 95) return Icons.thunderstorm_outlined;
+    return Icons.cloud_outlined;
+  }
+
+  Color _accentForCode(BuildContext context, int code) {
+    final scheme = Theme.of(context).colorScheme;
+    if (code == 0) return const Color(0xFFF59E0B);
+    if (code == 1 || code == 2) return scheme.primary;
+    if (code == 3) return scheme.primary;
+    if (code == 45 || code == 48) return scheme.onSurfaceVariant;
+    if (code >= 51 && code <= 57) return const Color(0xFF06B6D4);
+    if (code >= 61 && code <= 67) return const Color(0xFF3B82F6);
+    if (code >= 71 && code <= 77) return const Color(0xFF60A5FA);
+    if (code >= 80 && code <= 82) return const Color(0xFF3B82F6);
+    if (code >= 95) return const Color(0xFF8B5CF6);
+    return scheme.primary;
+  }
+
   void _retry() {
     setState(() {
       _future = _load();
@@ -222,33 +249,44 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
         final data = snapshot.data;
 
         String subtitle;
-        Widget? trailing;
+        Widget trailing;
+        IconData icon;
+        Color accent;
 
         if (isLoading) {
           subtitle = 'Loading…';
-          trailing = const SizedBox(
-            height: 18,
-            width: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          );
+          trailing = const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2));
+          icon = Icons.cloud_outlined;
+          accent = Theme.of(context).colorScheme.primary;
         } else if (hasError || data == null) {
           subtitle = 'Tap to retry';
           trailing = const Icon(Icons.refresh);
+          icon = Icons.cloud_off_outlined;
+          accent = Theme.of(context).colorScheme.onSurfaceVariant;
         } else {
           final temp = data.temperatureC.toStringAsFixed(1);
           final wind = data.windSpeed.toStringAsFixed(0);
           subtitle = '${_describeCode(data.weatherCode)} • Wind ${wind}km/h';
-          trailing = Text(
-            '$temp°C',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          icon = _iconForCode(data.weatherCode);
+          accent = _accentForCode(context, data.weatherCode);
+          trailing = Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '$temp°C',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
+            ),
           );
         }
 
-        return FeatureCard(
-          icon: Icons.cloud_outlined,
-          title: 'Weather',
-          subtitle: subtitle,
-          trailing: trailing,
+        return InkWell(
+          borderRadius: BorderRadius.circular(22),
           onTap: () {
             _openActionsSheet(
               isLoading: isLoading,
@@ -256,6 +294,39 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
               hasData: data != null,
             );
           },
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: accent.withOpacity(0.14),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(icon, color: accent, size: 28),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Weather',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                  trailing,
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
@@ -319,7 +390,7 @@ class DashboardTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             children: [
               ImageHeroCard(
-                imageUrl: 'https://picsum.photos/seed/agrichain_dashboard/1200/700',
+                assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
                 title: 'Welcome back',
                 subtitle: isLoading ? 'Loading your farm summary…' : 'Monitor fields, predict yield, and sell safely.',
               ),

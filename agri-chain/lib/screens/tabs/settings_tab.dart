@@ -11,7 +11,7 @@ class SettingsTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         const ImageHeroCard(
-          imageUrl: 'https://picsum.photos/seed/agrichain_settings/1200/700',
+          imageUrl: 'https://source.unsplash.com/1200x700/?maize,farm,technology',
           title: 'Settings',
           subtitle: 'Manage your profile, preferences, and app configuration.',
         ),

@@ -61,14 +61,13 @@ class MaizeDetectorApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: colorScheme,
         scaffoldBackgroundColor: background,
-        
-        cardTheme: CardTheme(
+
+        cardTheme: const CardThemeData(
           elevation: 0,
-          color: colorScheme.surface,
           surfaceTintColor: Colors.transparent,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.all(Radius.circular(22)),
           ),
         ),
         appBarTheme: AppBarTheme(

@@ -30,7 +30,7 @@ class _AlertsTabState extends State<AlertsTab> {
           padding: const EdgeInsets.all(16),
           children: [
             const ImageHeroCard(
-              imageUrl: 'https://picsum.photos/seed/agrichain_alerts/1200/700',
+              imageUrl: 'https://source.unsplash.com/1200x700/?maize,leaf,field',
               title: 'Alerts',
               subtitle: 'AI insights and field notifications that need your attention.',
             ),

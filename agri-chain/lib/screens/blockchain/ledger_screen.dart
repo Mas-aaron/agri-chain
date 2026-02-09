@@ -68,7 +68,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
               padding: const EdgeInsets.all(16),
               children: const [
                 ImageHeroCard(
-                  imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                  imageUrl: 'https://source.unsplash.com/1200x700/?corn,grain,supply-chain',
                   title: 'Ledger',
                   subtitle: 'Track immutable contract events and status changes.',
                 ),
@@ -82,7 +82,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 const ImageHeroCard(
-                  imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                  imageUrl: 'https://source.unsplash.com/1200x700/?corn,grain,supply-chain',
                   title: 'Ledger',
                   subtitle: 'Track immutable contract events and status changes.',
                 ),
@@ -124,7 +124,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                 padding: const EdgeInsets.all(16),
                 children: const [
                   ImageHeroCard(
-                    imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                    imageUrl: 'https://source.unsplash.com/1200x700/?corn,grain,supply-chain',
                     title: 'Ledger',
                     subtitle: 'Track immutable contract events and status changes.',
                   ),
@@ -149,7 +149,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
               itemBuilder: (context, i) {
                 if (i == 0) {
                   return const ImageHeroCard(
-                    imageUrl: 'https://picsum.photos/seed/agrichain_ledger_header/1200/700',
+                    imageUrl: 'https://source.unsplash.com/1200x700/?corn,grain,supply-chain',
                     title: 'Ledger',
                     subtitle: 'Track immutable contract events and status changes.',
                   );

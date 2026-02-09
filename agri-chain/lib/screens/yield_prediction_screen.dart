@@ -151,7 +151,7 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const ImageHeroCard(
-            imageUrl: 'https://picsum.photos/seed/agrichain_yield/1200/700',
+            assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
             title: 'Yield forecast',
             subtitle: 'Estimate harvest output using your seasonal field conditions.',
           ),

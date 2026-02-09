@@ -20,7 +20,7 @@ class FieldsTab extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             const ImageHeroCard(
-              imageUrl: 'https://picsum.photos/seed/agrichain_fields/1200/700',
+              assetPath: 'assets/images/sustainable-garden-harvesting-produce.jpg',
               title: 'Your fields',
               subtitle: 'Track each plot, monitor location, and link alerts to fields.',
             ),
@@ -52,7 +52,7 @@ class FieldsTab extends StatelessWidget {
                 final location = f.location.isEmpty ? 'Unknown location' : f.location;
                 final sizeText = (f.sizeHa == null) ? '' : ' • ${f.sizeHa!.toStringAsFixed(2)} ha';
                 return ImageFeatureCard(
-                  imageUrl: 'https://picsum.photos/seed/field_${f.id}/300/300',
+                  assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
                   title: f.name,
                   subtitle: '$location • ${f.crop}$sizeText',
                   trailing: PopupMenuButton<String>(

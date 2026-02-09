@@ -245,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeader() {
     return const ImageHeroCard(
-      imageUrl: 'https://picsum.photos/seed/agrichain_scan/1200/700',
+      assetPath: 'assets/images/corn-field-sunset.jpg',
       title: 'AI Leaf Scanner',
       subtitle: 'Detect maize diseases instantly and get treatment advice.',
     );

@@ -114,18 +114,20 @@ class GradientHeroCard extends StatelessWidget {
 }
 
 class ImageHeroCard extends StatelessWidget {
-  final String imageUrl;
+  final String? imageUrl;
+  final String? assetPath;
   final String title;
   final String subtitle;
   final Widget? trailing;
 
   const ImageHeroCard({
     super.key,
-    required this.imageUrl,
+    this.imageUrl,
+    this.assetPath,
     required this.title,
     required this.subtitle,
     this.trailing,
-  });
+  }) : assert(imageUrl != null || assetPath != null);
 
   @override
   Widget build(BuildContext context) {
@@ -142,11 +144,17 @@ class ImageHeroCard extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(color: _alpha(scheme.primary, 0.08)),
-              ),
+              child: assetPath != null
+                  ? Image.asset(
+                      assetPath!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: _alpha(scheme.primary, 0.08)),
+                    )
+                  : Image.network(
+                      imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: _alpha(scheme.primary, 0.08)),
+                    ),
             ),
             Positioned.fill(
               child: DecoratedBox(
@@ -202,7 +210,8 @@ class ImageHeroCard extends StatelessWidget {
 }
 
 class ImageFeatureCard extends StatelessWidget {
-  final String imageUrl;
+  final String? imageUrl;
+  final String? assetPath;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
@@ -210,12 +219,13 @@ class ImageFeatureCard extends StatelessWidget {
 
   const ImageFeatureCard({
     super.key,
-    required this.imageUrl,
+    this.imageUrl,
+    this.assetPath,
     required this.title,
     required this.subtitle,
     this.onTap,
     this.trailing,
-  });
+  }) : assert(imageUrl != null || assetPath != null);
 
   @override
   Widget build(BuildContext context) {
@@ -234,11 +244,17 @@ class ImageFeatureCard extends StatelessWidget {
                 child: SizedBox(
                   width: 64,
                   height: 64,
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(color: _alpha(scheme.primary, 0.08)),
-                  ),
+                  child: assetPath != null
+                      ? Image.asset(
+                          assetPath!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(color: _alpha(scheme.primary, 0.08)),
+                        )
+                      : Image.network(
+                          imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(color: _alpha(scheme.primary, 0.08)),
+                        ),
                 ),
               ),
               const SizedBox(width: 12),

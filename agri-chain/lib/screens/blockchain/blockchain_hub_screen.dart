@@ -17,13 +17,13 @@ class BlockchainHubScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         children: [
           const ImageHeroCard(
-            imageUrl: 'https://picsum.photos/seed/agrichain_market/1200/700',
+            imageUrl: 'https://source.unsplash.com/1200x700/?maize,cornfield,agriculture',
             title: 'Agri‑Market',
             subtitle: 'Create, buy, and track Future Harvest Contracts.',
           ),
           const SizedBox(height: 12),
           ImageFeatureCard(
-            imageUrl: 'https://picsum.photos/seed/agrichain_contracts/400/400',
+            imageUrl: 'https://source.unsplash.com/400x400/?maize,harvest,grain',
             title: 'Future Harvest Contracts',
             subtitle: 'Browse listed harvest predictions and purchase securely.',
             onTap: () => Navigator.push(
@@ -33,7 +33,7 @@ class BlockchainHubScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           ImageFeatureCard(
-            imageUrl: 'https://picsum.photos/seed/agrichain_ledger/400/400',
+            imageUrl: 'https://source.unsplash.com/400x400/?corn,warehouse,trade',
             title: 'Ledger',
             subtitle: 'Immutable event log for contract lifecycle actions.',
             onTap: () => Navigator.push(

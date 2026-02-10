@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:agri_chain/services/yield_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/config/app_config.dart';
 
 class YieldPredictionScreen extends StatefulWidget {
   const YieldPredictionScreen({super.key});
@@ -28,8 +29,6 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
   String? _message;
   bool _loading = false;
   String? _error;
-
-  static const _defaultApiBaseUrl = 'http://10.0.2.2:8000';
 
   @override
   void dispose() {
@@ -73,7 +72,7 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
     );
 
     try {
-      final api = YieldApiService.fromBaseUrl(_defaultApiBaseUrl);
+      final api = YieldApiService.fromBaseUrl(AppConfig.apiBaseUrl);
       final resp = await api.predict(req);
       if (!mounted) return;
       setState(() {

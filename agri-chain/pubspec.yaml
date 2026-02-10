@@ -37,14 +37,12 @@ dependencies:
   firebase_core: ^4.3.0
   firebase_storage: ^13.0.5
   url_launcher: ^6.2.4
-<<<<<<< HEAD
-  
-  # Blockchain & Yield Features
-  fl_chart: ^0.65.0
-  intl: ^0.19.0
-=======
   geolocator: ^13.0.2
->>>>>>> faba4be733901de26000a3f5c0cf4935c41a2047
+  
+  # Blockchain & Web3
+  web3dart: ^2.6.1
+  eth_provider: ^1.0.3
+  bip39: ^1.0.6
 
 dev_dependencies:
   flutter_test:

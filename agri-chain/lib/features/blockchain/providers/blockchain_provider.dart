@@ -1,13 +1,16 @@
 import 'package:flutter/foundation.dart';
 import '../models/yield_asset.dart';
 import '../services/blockchain_api_service.dart';
+import '../services/web3_service.dart';
 
 /// Provider for managing blockchain yield assets and portfolio
 class BlockchainProvider extends ChangeNotifier {
   final BlockchainApiService _apiService;
+  final Web3Service _web3Service;
 
-  BlockchainProvider({BlockchainApiService? apiService})
-      : _apiService = apiService ?? BlockchainApiService();
+  BlockchainProvider({BlockchainApiService? apiService, Web3Service? web3Service})
+      : _apiService = apiService ?? BlockchainApiService(),
+        _web3Service = web3Service ?? Web3Service();
 
   // State variables
   List<YieldAsset> _assets = [];
@@ -194,4 +197,160 @@ class BlockchainProvider extends ChangeNotifier {
     }
     return 'An unexpected error occurred';
   }
+
+  // Blockchain-specific methods
+  
+  /// Initialize blockchain connection
+  Future<bool> initializeBlockchain() async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      
+      final success = await _web3Service.initialize();
+      if (!success) {
+        _error = 'Failed to initialize blockchain connection';
+        return false;
+      }
+      
+      return true;
+    } catch (e) {
+      _error = _parseError(e);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Connect wallet
+  Future<bool> connectWallet() async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      
+      final success = await _web3Service.connectWallet();
+      if (!success) {
+        _error = 'Failed to connect wallet';
+        return false;
+      }
+      
+      await refresh(); // Refresh assets after wallet connection
+      return true;
+    } catch (e) {
+      _error = _parseError(e);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Get wallet balance
+  Future<String> getWalletBalance() async {
+    if (!_web3Service.isConnected || _web3Service.userAddress == null) {
+      return '0.0';
+    }
+    
+    try {
+      return await _web3Service.getBalance(_web3Service.userAddress!);
+    } catch (e) {
+      _error = _parseError(e);
+      return '0.0';
+    }
+  }
+
+  /// Create yield token on blockchain
+  Future<String?> createYieldToken({
+    required String farmerId,
+    required BigInt yieldAmount,
+    required String cropType,
+  }) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      
+      final txHash = await _web3Service.createYieldToken(
+        farmerId: farmerId,
+        yieldAmount: yieldAmount,
+        cropType: cropType,
+      );
+      
+      await refresh(); // Refresh assets after token creation
+      return txHash;
+    } catch (e) {
+      _error = _parseError(e);
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Transfer yield token
+  Future<String?> transferYieldToken({
+    required String toAddress,
+    required BigInt tokenId,
+  }) async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      
+      final txHash = await _web3Service.transferYieldToken(
+        toAddress: toAddress,
+        tokenId: tokenId,
+      );
+      
+      await refresh(); // Refresh assets after transfer
+      return txHash;
+    } catch (e) {
+      _error = _parseError(e);
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Get token information
+  Future<Map<String, dynamic>?> getTokenInfo(BigInt tokenId) async {
+    try {
+      return await _web3Service.getTokenInfo(tokenId);
+    } catch (e) {
+      _error = _parseError(e);
+      return null;
+    }
+  }
+
+  /// Get transaction status
+  Future<bool> getTransactionStatus(String txHash) async {
+    try {
+      return await _web3Service.getTransactionStatus(txHash);
+    } catch (e) {
+      _error = _parseError(e);
+      return false;
+    }
+  }
+
+  /// Get gas price
+  Future<String> getGasPrice() async {
+    try {
+      return await _web3Service.getGasPrice();
+    } catch (e) {
+      _error = _parseError(e);
+      return '0.0';
+    }
+  }
+
+  /// Disconnect wallet
+  void disconnectWallet() {
+    _web3Service.disconnect();
+    clear();
+  }
+
+  /// Getters for wallet status
+  bool get isWalletConnected => _web3Service.isConnected;
+  String? get walletAddress => _web3Service.userAddress;
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:agri_chain/services/contracts_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/config/app_config.dart';
 
 class YieldContract {
   final String id;
@@ -33,14 +34,13 @@ class ContractsScreen extends StatefulWidget {
 }
 
 class _ContractsScreenState extends State<ContractsScreen> {
-  static const _defaultApiBaseUrl = 'http://10.0.2.2:8000';
   late final ContractsApiService _api;
   late Future<List<YieldContractDto>> _future;
 
   @override
   void initState() {
     super.initState();
-    _api = ContractsApiService.fromBaseUrl(_defaultApiBaseUrl);
+    _api = ContractsApiService.fromBaseUrl(AppConfig.apiBaseUrl);
     _future = _api.listContracts();
   }
 

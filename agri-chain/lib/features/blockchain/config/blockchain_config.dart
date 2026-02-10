@@ -1,17 +1,18 @@
+import 'package:agri_chain/config/app_config.dart';
+
 /// Blockchain configuration constants
 class BlockchainConfig {
-  // API Configuration
-  static const String apiBaseUrl = 'http://localhost:3000/api';
-  static const Duration apiTimeout = Duration(seconds: 30);
+  // API Configuration - Use environment-based URL
+  static String get apiBaseUrl => '${AppConfig.apiBaseUrl}/blockchain';
+  static Duration get apiTimeout => AppConfig.apiTimeout;
 
-  // Blockchain Configuration
-  static const String blockchainProvider = 'http://localhost:8545';
-  static const String contractAddress =
-      '0x0000000000000000000000000000000000000000';
-  static const String chainId = '1';
+  // Blockchain Configuration - Use environment-based RPC
+  static String get blockchainProvider => AppConfig.blockchainRpcUrl;
+  static String get contractAddress => String.fromEnvironment('CONTRACT_ADDRESS', defaultValue: '0x0000000000000000000000000000000000000000');
+  static String get chainId => String.fromEnvironment('CHAIN_ID', defaultValue: '1');
 
   // Features
-  static const bool enableWeb3Integration = true;
+  static bool get enableWeb3Integration => AppConfig.enableBlockchainFeatures;
   static const bool enableOracle = true;
   static const bool enableTrading = true;
 

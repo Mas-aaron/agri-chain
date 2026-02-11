@@ -55,15 +55,14 @@ class _BlockchainTabState extends State<BlockchainTab> with SingleTickerProvider
             // Tab Bar
             TabBar(
               controller: _tabController,
-              tabs: const [
-                Tab(icon: Icon(Icons.dashboard), text: 'Portfolio'),
-                Tab(icon: Icon(Icons.wallet), text: 'Wallet'),
-                Tab(icon: Icon(Icons.token), text: 'Tokenize'),
-                Tab(icon: Icon(Icons.swap_horiz), text: 'Transfers'),
-                Tab(icon: Icon(Icons.send), text: 'Transactions'),
-                Tab(icon: Icon(Icons.security), text: 'Advanced'),
-                if (AppConfig.isDebugMode)
-                  Tab(icon: Icon(Icons.bug_report), text: 'Tests'),
+              tabs: [
+                const Tab(icon: Icon(Icons.dashboard), text: 'Portfolio'),
+                const Tab(icon: Icon(Icons.wallet), text: 'Wallet'),
+                const Tab(icon: Icon(Icons.token), text: 'Tokenize'),
+                const Tab(icon: Icon(Icons.swap_horiz), text: 'Transfers'),
+                const Tab(icon: Icon(Icons.send), text: 'Transactions'),
+                const Tab(icon: Icon(Icons.security), text: 'Advanced'),
+                if (AppConfig.isDebugMode) const Tab(icon: Icon(Icons.bug_report), text: 'Tests'),
               ],
             ),
             // Tab Views

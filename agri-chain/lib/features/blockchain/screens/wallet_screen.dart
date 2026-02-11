@@ -322,7 +322,7 @@ class _WalletScreenState extends State<WalletScreen> {
             width: double.infinity,
             child: TextButton.icon(
               onPressed: _disconnectWallet,
-              icon: const Icon(Icons.disconnect),
+              icon: const Icon(Icons.link_off),
               label: const Text('Disconnect Wallet'),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),

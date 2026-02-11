@@ -1,5 +1,12 @@
 import 'package:agri_chain/config/app_config.dart';
 
+const String _kContractAddress = String.fromEnvironment(
+  'CONTRACT_ADDRESS',
+  defaultValue: '0x0000000000000000000000000000000000000000',
+);
+
+const String _kChainId = String.fromEnvironment('CHAIN_ID', defaultValue: '1');
+
 /// Blockchain configuration constants
 class BlockchainConfig {
   // API Configuration - Use environment-based URL
@@ -8,8 +15,8 @@ class BlockchainConfig {
 
   // Blockchain Configuration - Use environment-based RPC
   static String get blockchainProvider => AppConfig.blockchainRpcUrl;
-  static String get contractAddress => String.fromEnvironment('CONTRACT_ADDRESS', defaultValue: '0x0000000000000000000000000000000000000000');
-  static String get chainId => String.fromEnvironment('CHAIN_ID', defaultValue: '1');
+  static String get contractAddress => _kContractAddress;
+  static String get chainId => _kChainId;
 
   // Features
   static bool get enableWeb3Integration => AppConfig.enableBlockchainFeatures;

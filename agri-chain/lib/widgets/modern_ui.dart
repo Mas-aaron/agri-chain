@@ -342,6 +342,27 @@ class FeatureCard extends StatelessWidget {
   }
 }
 
+class ModernCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  const ModernCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: padding,
+        child: child,
+      ),
+    );
+  }
+}
+
 class MiniStatTile extends StatelessWidget {
   final String label;
   final String value;

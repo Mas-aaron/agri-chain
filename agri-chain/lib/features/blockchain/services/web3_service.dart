@@ -4,7 +4,18 @@ import 'package:web3dart/web3dart.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bip39/bip39.dart' as bip39;
+import 'package:ed25519_hd_key/ed25519_hd_key.dart';
 import 'package:agri_chain/config/app_config.dart';
+
+ const String _kContractAddressHex = String.fromEnvironment(
+   'CONTRACT_ADDRESS',
+   defaultValue: '0x0000000000000000000000000000000000000000',
+ );
+
+ const int _kChainId = int.fromEnvironment(
+   'CHAIN_ID',
+   defaultValue: 1,
+ );
 
 /// Service for Web3 and blockchain interactions
 class Web3Service {
@@ -18,26 +29,7 @@ class Web3Service {
 
   String? get userAddress => _userAddress;
   bool get isConnected => _isConnected;
-
-  Credentials getCredentials() {
-    final creds = _credentials;
-    if (creds == null) {
-      throw StateError('Wallet not connected');
-    }
-    return creds;
-  }
-
-  Future<DeployedContract> getContract() async {
-    if (_contract == null) {
-      await _loadContract();
-    }
-    return _contract!;
-  }
-
-  Future<DeployedContract> getInsuranceContract() async {
-    // Placeholder: for now, reuse the main contract instance.
-    return getContract();
-  }
+  Web3Client get client => _client;
 
   /// Initialize Web3 connection
   Future<bool> initialize() async {
@@ -93,10 +85,8 @@ class Web3Service {
       }
     ]''';
 
-    // Contract address would be loaded from environment or config
-    final contractAddr = EthereumAddress.fromHex(
-      String.fromEnvironment('CONTRACT_ADDRESS', defaultValue: '0x0000000000000000000000000000000000000000')
-    );
+    // Contract address must be compile-time provided for web builds.
+    final contractAddr = EthereumAddress.fromHex(_kContractAddressHex);
     
     _contractAddress = contractAddr;
     _contract = DeployedContract(
@@ -111,7 +101,11 @@ class Web3Service {
     final mnemonic = prefs.getString('wallet_mnemonic');
     
     if (mnemonic != null && bip39.validateMnemonic(mnemonic)) {
-      _credentials = _privateKeyFromMnemonic(mnemonic);
+      final seed = bip39.mnemonicToSeed(mnemonic);
+      final master = await ED25519_HD_KEY.getMasterKeyFromSeed(seed);
+      final privateKey = bytesToHex(master.key);
+      
+      _credentials = EthPrivateKey.fromHex(privateKey);
       _userAddress = _credentials!.address.hex;
     }
   }
@@ -130,13 +124,15 @@ class Web3Service {
       if (_credentials == null) {
         // Generate new mnemonic and wallet
         final mnemonic = bip39.generateMnemonic();
-        final privateKey = _privateKeyFromMnemonic(mnemonic);
+        final seed = bip39.mnemonicToSeed(mnemonic);
+        final master = await ED25519_HD_KEY.getMasterKeyFromSeed(seed);
+        final privateKey = bytesToHex(master.key);
         
         // Save mnemonic securely
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('wallet_mnemonic', mnemonic);
         
-        _credentials = privateKey;
+        _credentials = EthPrivateKey.fromHex(privateKey);
       }
       
       _userAddress = _credentials!.address.hex;
@@ -188,7 +184,7 @@ class Web3Service {
       final signedTx = await _client.sendTransaction(
         _credentials!,
         transaction,
-        chainId: int.parse(String.fromEnvironment('CHAIN_ID', defaultValue: '1')),
+        chainId: _kChainId,
       );
 
       return signedTx;
@@ -219,7 +215,7 @@ class Web3Service {
       final signedTx = await _client.sendTransaction(
         _credentials!,
         transaction,
-        chainId: int.parse(String.fromEnvironment('CHAIN_ID', defaultValue: '1')),
+        chainId: _kChainId,
       );
 
       return signedTx;
@@ -252,8 +248,8 @@ class Web3Service {
     }
   }
 
-  /// Sign a transaction (legacy method)
-  Future<Uint8List> signTransaction({
+  /// Sign a transaction
+  Future<String> signTransaction({
     required String from,
     required String to,
     required String amount,
@@ -277,8 +273,8 @@ class Web3Service {
         maxGas: 21000,
       );
 
-      final signedTx = await _client.signTransaction(_credentials!, transaction);
-      return signedTx;
+      final signedTx = await _client.signTransaction(_credentials!, transaction, chainId: 1);
+      return bytesToHex(signedTx);
     } catch (e) {
       throw Exception('Failed to sign transaction: $e');
     }
@@ -292,8 +288,9 @@ class Web3Service {
   }) async {
     try {
       final signedTx = await signTransaction(from: from, to: to, amount: amount);
+      final signedBytes = hexToBytes(signedTx);
       
-      final txHash = await _client.sendRawTransaction(signedTx);
+      final txHash = await _client.sendRawTransaction(Uint8List.fromList(signedBytes));
       return txHash;
     } catch (e) {
       throw Exception('Failed to send transaction: $e');
@@ -364,8 +361,7 @@ class Web3Service {
       final toAddr = EthereumAddress.fromHex(to);
       final gasEstimate = await _client.estimateGas(
         to: toAddr,
-        sender: _credentials!.address,
-        data: data != null ? hexToBytes(data) : null,
+        data: data != null ? Uint8List.fromList(hexToBytes(data)) : null,
       );
       
       return gasEstimate;
@@ -373,10 +369,37 @@ class Web3Service {
       throw Exception('Failed to estimate gas: $e');
     }
   }
+
+  /// Get credentials for signing
+  Credentials getCredentials() {
+    if (_credentials == null) {
+      throw Exception('Wallet not connected');
+    }
+    return _credentials!;
+  }
+
+  /// Get contract instance
+  Future<DeployedContract> getContract() async {
+    if (_contract == null) {
+      await _loadContract();
+    }
+    return _contract!;
+  }
+
+  /// Get insurance contract instance
+  Future<DeployedContract> getInsuranceContract() async {
+    // For now, return the same contract - would be separate in real implementation
+    return getContract();
+  }
 }
 
 /// Helper function to convert hex string to bytes
 List<int> hexToBytes(String hex) {
   hex = hex.startsWith('0x') ? hex.substring(2) : hex;
   return List.generate(hex.length ~/ 2, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16));
+}
+
+/// Helper function to convert bytes to hex string
+String bytesToHex(List<int> bytes) {
+  return '0x' + bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
 }

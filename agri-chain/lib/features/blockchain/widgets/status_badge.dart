@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 /// Status badge widget for displaying asset status
 class StatusBadge extends StatelessWidget {
   final String status;
+  final bool? isActive;
 
   const StatusBadge({
     super.key,
     required this.status,
+    this.isActive,
   });
 
   Color _getStatusColor() {
@@ -37,10 +39,10 @@ class StatusBadge extends StatelessWidget {
         vertical: 6,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: (isActive ?? true) ? color.withOpacity(0.1) : Colors.grey.withOpacity(0.08),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: color.withOpacity(0.5),
+          color: (isActive ?? true) ? color.withOpacity(0.5) : Colors.grey.withOpacity(0.25),
         ),
       ),
       child: Text(
@@ -48,7 +50,7 @@ class StatusBadge extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: color,
+          color: (isActive ?? true) ? color : Colors.grey,
         ),
       ),
     );

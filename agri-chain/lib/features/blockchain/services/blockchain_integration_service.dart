@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:agri_chain/config/app_config.dart';
+import 'package:agri_chain/features/blockchain/config/blockchain_config.dart';
 import 'package:agri_chain/services/contracts_api_service.dart';
 
 /// Service for integrating blockchain features with backend contracts
@@ -202,7 +203,7 @@ class BlockchainIntegrationService {
       'transactionHash': '0x${_generateRandomHex(64)}',
       'blockNumber': 12345678,
       'tokenId': '${DateTime.now().millisecondsSinceEpoch}',
-      'contractAddress': String.fromEnvironment('CONTRACT_ADDRESS', defaultValue: '0x0000000000000000000000000000000000000000'),
+      'contractAddress': BlockchainConfig.contractAddress,
       'timestamp': DateTime.now().toIso8601String(),
       'confirmed': true,
     };

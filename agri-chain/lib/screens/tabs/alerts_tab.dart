@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 
 import 'package:agri_chain/providers/alerts_provider.dart';
+import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 
 enum _AlertsFilter { all, unread, critical }
@@ -181,6 +182,114 @@ class _AlertDetailScreen extends StatelessWidget {
     return const [];
   }
 
+  String? _predictionLabel(AlertItem a) {
+    final top = a.extra?['top'];
+    if (top is Map) {
+      final label = top['label'];
+      if (label is String && label.trim().isNotEmpty) return label.trim();
+    }
+
+    final title = a.title.trim();
+    const prefix = 'Manual Alert:';
+    if (title.toLowerCase().startsWith(prefix.toLowerCase())) {
+      final raw = title.substring(prefix.length).trim();
+      if (raw.isNotEmpty) return raw;
+    }
+    return null;
+  }
+
+  Widget _recommendationsCard(BuildContext context, AlertItem a) {
+    final label = _predictionLabel(a);
+    if (label == null) {
+      return const SizedBox.shrink();
+    }
+
+    final rec = RecommendationService.recommendForLabel(label);
+    final titleStyle = Theme.of(context).textTheme.titleMedium;
+    final subtitleStyle = Theme.of(context).textTheme.bodySmall;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Recommendation', style: titleStyle),
+            const SizedBox(height: 8),
+            Text(
+              rec.isHealthy
+                  ? 'Crop appears healthy. Maintain regular scouting and good agronomic practices.'
+                  : (rec.isNonMaize
+                      ? 'Image does not appear to be maize. Please rescan a clear maize leaf for accurate recommendations.'
+                      : 'Recommended credited agrochemicals and approved sellers for: ${rec.normalizedKey}'),
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (!rec.isHealthy && !rec.isNonMaize) ...[
+              const SizedBox(height: 12),
+              ...rec.chemicals.map((chem) {
+                final sellers = rec.sellersByChemicalId[chem.id] ?? const <ApprovedSeller>[];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Material(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+                      collapsedShape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
+                      title: Text(chem.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700)),
+                      subtitle: Text(
+                        chem.activeIngredient,
+                        style: subtitleStyle,
+                      ),
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              Chip(label: Text(chem.isCredited ? 'Credited' : 'Not credited')),
+                              Chip(label: Text('Target: ${chem.target}')),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text('Usage', style: titleStyle),
+                        const SizedBox(height: 6),
+                        Text(chem.usage, style: Theme.of(context).textTheme.bodyMedium),
+                        if (sellers.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text('Approved sellers', style: titleStyle),
+                          const SizedBox(height: 6),
+                          ...sellers.map((s) {
+                            final license = (s.licenseId == null || s.licenseId!.trim().isEmpty) ? null : s.licenseId!.trim();
+                            final line2 = [
+                              if (s.location.trim().isNotEmpty) s.location.trim(),
+                              if (license != null) 'License: $license',
+                            ].join(' • ');
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.storefront_outlined),
+                              title: Text(s.name),
+                              subtitle: Text(line2.isEmpty ? s.phone : '$line2\n${s.phone}'),
+                              isThreeLine: line2.isNotEmpty,
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final top3 = _top3();
@@ -263,12 +372,7 @@ class _AlertDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('AI recommendations (placeholder).'),
-            ),
-          ),
+          _recommendationsCard(context, latest),
         ],
       ),
     );

@@ -41,7 +41,6 @@ dependencies:
   
   # Blockchain & Web3
   web3dart: ^2.6.1
-  eth_provider: ^1.0.3
   bip39: ^1.0.6
 
 dev_dependencies:

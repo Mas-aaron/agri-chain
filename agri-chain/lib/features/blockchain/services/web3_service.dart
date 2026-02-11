@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:web3dart/web3dart.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +18,26 @@ class Web3Service {
 
   String? get userAddress => _userAddress;
   bool get isConnected => _isConnected;
+
+  Credentials getCredentials() {
+    final creds = _credentials;
+    if (creds == null) {
+      throw StateError('Wallet not connected');
+    }
+    return creds;
+  }
+
+  Future<DeployedContract> getContract() async {
+    if (_contract == null) {
+      await _loadContract();
+    }
+    return _contract!;
+  }
+
+  Future<DeployedContract> getInsuranceContract() async {
+    // Placeholder: for now, reuse the main contract instance.
+    return getContract();
+  }
 
   /// Initialize Web3 connection
   Future<bool> initialize() async {
@@ -90,9 +111,17 @@ class Web3Service {
     final mnemonic = prefs.getString('wallet_mnemonic');
     
     if (mnemonic != null && bip39.validateMnemonic(mnemonic)) {
-      _credentials = EthPrivateKey.fromSeed(bip39.mnemonicToSeed(mnemonic));
+      _credentials = _privateKeyFromMnemonic(mnemonic);
       _userAddress = _credentials!.address.hex;
     }
+  }
+
+  EthPrivateKey _privateKeyFromMnemonic(String mnemonic) {
+    final seed = bip39.mnemonicToSeed(mnemonic);
+    // NOTE: This is a simplified deterministic derivation (seed[0..31]).
+    // For production wallets you should derive using BIP32/BIP44 paths.
+    final keyBytes = Uint8List.fromList(seed.sublist(0, 32));
+    return EthPrivateKey(keyBytes);
   }
 
   /// Connect wallet (create new if none exists)
@@ -101,7 +130,7 @@ class Web3Service {
       if (_credentials == null) {
         // Generate new mnemonic and wallet
         final mnemonic = bip39.generateMnemonic();
-        final privateKey = EthPrivateKey.fromSeed(bip39.mnemonicToSeed(mnemonic));
+        final privateKey = _privateKeyFromMnemonic(mnemonic);
         
         // Save mnemonic securely
         final prefs = await SharedPreferences.getInstance();
@@ -122,7 +151,7 @@ class Web3Service {
   /// Get user's wallet balance
   Future<String> getBalance(String address) async {
     try {
-      if (!_isConnected || _client == null) {
+      if (!_isConnected) {
         throw Exception('Web3 not initialized');
       }
       
@@ -202,7 +231,7 @@ class Web3Service {
   /// Get token information
   Future<Map<String, dynamic>> getTokenInfo(BigInt tokenId) async {
     try {
-      if (!_isConnected || _client == null || _contract == null) {
+      if (!_isConnected || _contract == null) {
         throw Exception('Web3 not properly initialized');
       }
 
@@ -224,7 +253,7 @@ class Web3Service {
   }
 
   /// Sign a transaction (legacy method)
-  Future<String> signTransaction({
+  Future<Uint8List> signTransaction({
     required String from,
     required String to,
     required String amount,
@@ -234,12 +263,15 @@ class Web3Service {
         throw Exception('Wallet not connected');
       }
 
+      // Optional sanity check: ensure the provided "from" matches current wallet.
       final fromAddr = EthereumAddress.fromHex(from);
+      if (fromAddr != _credentials!.address) {
+        throw Exception('From address does not match connected wallet');
+      }
       final toAddr = EthereumAddress.fromHex(to);
       final amountWei = BigInt.parse(amount) * BigInt.from(10).pow(18);
 
       final transaction = Transaction(
-        from: fromAddr,
         to: toAddr,
         value: EtherAmount.fromUnitAndValue(EtherUnit.wei, amountWei),
         maxGas: 21000,
@@ -332,7 +364,7 @@ class Web3Service {
       final toAddr = EthereumAddress.fromHex(to);
       final gasEstimate = await _client.estimateGas(
         to: toAddr,
-        from: _credentials!.address,
+        sender: _credentials!.address,
         data: data != null ? hexToBytes(data) : null,
       );
       

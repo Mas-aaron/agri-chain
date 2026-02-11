@@ -1,18 +1,17 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:agri_chain/splash_screen.dart';
 import 'package:agri_chain/services/tflite_service.dart';
 import 'package:agri_chain/providers/scan_provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
+import 'package:agri_chain/firebase_bootstrap.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
-    await Firebase.initializeApp();
-    // Firebase initialized (optional for Hosting-only flows)
+    await FirebaseBootstrap.initialize();
   } catch (e) {
     // Continue without Firebase if not configured
     // print('Firebase init failed: $e');

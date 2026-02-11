@@ -68,7 +68,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
               padding: const EdgeInsets.all(16),
               children: const [
                 ImageHeroCard(
-                  imageUrl: 'https://source.unsplash.com/1200x700/?corn,grain,supply-chain',
+                  assetPath: 'assets/images/logo.png',
                   title: 'Ledger',
                   subtitle: 'Track immutable contract events and status changes.',
                 ),
@@ -82,7 +82,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 const ImageHeroCard(
-                  imageUrl: 'https://source.unsplash.com/1200x700/?corn,grain,supply-chain',
+                  assetPath: 'assets/images/logo.png',
                   title: 'Ledger',
                   subtitle: 'Track immutable contract events and status changes.',
                 ),

@@ -23,7 +23,7 @@ class _AdvancedTokenizationScreenState extends State<AdvancedTokenizationScreen>
   final _harvestDateCtrl = TextEditingController();
   
   String _selectedCropType = CropTypes.corn;
-  AdvancedTokenService.InsuranceTier _selectedInsuranceTier = AdvancedTokenService.InsuranceTier.silver;
+  InsuranceTier _selectedInsuranceTier = InsuranceTier.silver;
   DateTime? _harvestDate;
   bool _isTokenizing = false;
   Map<String, dynamic>? _tokenizationResult;
@@ -338,8 +338,8 @@ class _AdvancedTokenizationScreenState extends State<AdvancedTokenizationScreen>
               ),
             ),
             const SizedBox(height: 8),
-            ...AdvancedTokenService.InsuranceTier.values.map((tier) {
-              return RadioListTile<AdvancedTokenService.InsuranceTier>(
+            ...InsuranceTier.values.map((tier) {
+              return RadioListTile<InsuranceTier>(
                 title: Text(_getInsuranceTierName(tier)),
                 subtitle: Text(_getInsuranceTierDescription(tier)),
                 value: tier,
@@ -591,28 +591,28 @@ class _AdvancedTokenizationScreenState extends State<AdvancedTokenizationScreen>
     }
   }
 
-  String _getInsuranceTierName(AdvancedTokenService.InsuranceTier tier) {
+  String _getInsuranceTierName(InsuranceTier tier) {
     switch (tier) {
-      case AdvancedTokenService.InsuranceTier.bronze:
+      case InsuranceTier.bronze:
         return 'Bronze';
-      case AdvancedTokenService.InsuranceTier.silver:
+      case InsuranceTier.silver:
         return 'Silver';
-      case AdvancedTokenService.InsuranceTier.gold:
+      case InsuranceTier.gold:
         return 'Gold';
-      case AdvancedTokenService.InsuranceTier.platinum:
+      case InsuranceTier.platinum:
         return 'Platinum';
     }
   }
 
-  String _getInsuranceTierDescription(AdvancedTokenService.InsuranceTier tier) {
+  String _getInsuranceTierDescription(InsuranceTier tier) {
     switch (tier) {
-      case AdvancedTokenService.InsuranceTier.bronze:
+      case InsuranceTier.bronze:
         return '50% coverage, 3% premium';
-      case AdvancedTokenService.InsuranceTier.silver:
+      case InsuranceTier.silver:
         return '60% coverage, 2.5% premium';
-      case AdvancedTokenService.InsuranceTier.gold:
+      case InsuranceTier.gold:
         return '70% coverage, 2% premium';
-      case AdvancedTokenService.InsuranceTier.platinum:
+      case InsuranceTier.platinum:
         return '80% coverage, 1.5% premium';
     }
   }

@@ -97,7 +97,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 ImageHeroCard(
-                  imageUrl: 'https://source.unsplash.com/1200x700/?maize,corn,harvest',
+                  assetPath: 'assets/images/logo.png',
                   title: 'Future harvest contracts',
                   subtitle: 'List your predicted harvest or purchase securely.',
                 ),
@@ -111,7 +111,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 ImageHeroCard(
-                  imageUrl: 'https://source.unsplash.com/1200x700/?maize,corn,harvest',
+                  assetPath: 'assets/images/logo.png',
                   title: 'Future harvest contracts',
                   subtitle: 'List your predicted harvest or purchase securely.',
                 ),
@@ -151,7 +151,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 ImageHeroCard(
-                  imageUrl: 'https://source.unsplash.com/1200x700/?maize,corn,harvest',
+                  assetPath: 'assets/images/logo.png',
                   title: 'Future harvest contracts',
                   subtitle: 'List your predicted harvest or purchase securely.',
                 ),
@@ -190,7 +190,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
               itemBuilder: (context, i) {
                 if (i == 0) {
                   return ImageHeroCard(
-                    imageUrl: 'https://source.unsplash.com/1200x700/?maize,corn,harvest',
+                    assetPath: 'assets/images/logo.png',
                     title: 'Future harvest contracts',
                     subtitle: 'List your predicted harvest or purchase securely.',
                   );

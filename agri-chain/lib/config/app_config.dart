@@ -1,3 +1,20 @@
+const String _kFlutterEnv = String.fromEnvironment('FLUTTER_ENV', defaultValue: 'development');
+
+const String _kApiBaseUrlOverride = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://10.0.2.2:8000',
+);
+
+const String _kBlockchainRpcOverride = String.fromEnvironment(
+  'BLOCKCHAIN_RPC_URL',
+  defaultValue: 'http://10.0.2.2:8545',
+);
+
+const bool _kEnableBlockchain = bool.fromEnvironment('ENABLE_BLOCKCHAIN', defaultValue: true);
+const bool _kEnableDebugLogs = bool.fromEnvironment('ENABLE_DEBUG_LOGS', defaultValue: false);
+
+const String _kDatabasePath = String.fromEnvironment('DATABASE_PATH', defaultValue: 'agrichain.db');
+
 /// Application configuration with environment-based settings
 class AppConfig {
   // API Configuration
@@ -5,11 +22,10 @@ class AppConfig {
   static const String _prodApiBaseUrl = 'https://api.agrichain.com';
   
   static String get apiBaseUrl {
-    const environment = String.fromEnvironment('FLUTTER_ENV', defaultValue: 'development');
-    return switch (environment) {
+    return switch (_kFlutterEnv) {
       'production' => _prodApiBaseUrl,
       'staging' => 'https://staging-api.agrichain.com',
-      _ => String.fromEnvironment('API_BASE_URL', defaultValue: _defaultApiBaseUrl),
+      _ => _kApiBaseUrlOverride.isNotEmpty ? _kApiBaseUrlOverride : _defaultApiBaseUrl,
     };
   }
 
@@ -18,17 +34,16 @@ class AppConfig {
   static const String _prodBlockchainRpc = 'https://mainnet.infura.io/v3/YOUR-PROJECT-ID';
   
   static String get blockchainRpcUrl {
-    const environment = String.fromEnvironment('FLUTTER_ENV', defaultValue: 'development');
-    return switch (environment) {
+    return switch (_kFlutterEnv) {
       'production' => _prodBlockchainRpc,
       'staging' => 'https://goerli.infura.io/v3/YOUR-PROJECT-ID',
-      _ => String.fromEnvironment('BLOCKCHAIN_RPC_URL', defaultValue: _defaultBlockchainRpc),
+      _ => _kBlockchainRpcOverride.isNotEmpty ? _kBlockchainRpcOverride : _defaultBlockchainRpc,
     };
   }
 
   // App Environment
   static String get environment {
-    return String.fromEnvironment('FLUTTER_ENV', defaultValue: 'development');
+    return _kFlutterEnv;
   }
 
   static bool get isDebugMode {
@@ -41,17 +56,16 @@ class AppConfig {
 
   // Feature Flags
   static bool get enableBlockchainFeatures {
-    return String.fromEnvironment('ENABLE_BLOCKCHAIN', defaultValue: 'true').toLowerCase() == 'true';
+    return _kEnableBlockchain;
   }
 
   static bool get enableDebugLogs {
-    return String.fromEnvironment('ENABLE_DEBUG_LOGS', defaultValue: 'false').toLowerCase() == 'true';
+    return _kEnableDebugLogs;
   }
 
   // Timeout Configuration
   static Duration get apiTimeout {
-    const environment = String.fromEnvironment('FLUTTER_ENV', defaultValue: 'development');
-    return switch (environment) {
+    return switch (_kFlutterEnv) {
       'production' => const Duration(seconds: 30),
       'staging' => const Duration(seconds: 20),
       _ => const Duration(seconds: 10),
@@ -60,6 +74,6 @@ class AppConfig {
 
   // Database Configuration
   static String get databasePath {
-    return String.fromEnvironment('DATABASE_PATH', defaultValue: 'agrichain.db');
+    return _kDatabasePath;
   }
 }

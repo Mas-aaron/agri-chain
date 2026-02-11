@@ -336,9 +336,9 @@ class _TransferManagementScreenState extends State<TransferManagementScreen> {
     if (_tokenInfo == null) return const SizedBox.shrink();
     
     final info = _tokenInfo!;
-    final phase = AdvancedTokenService.TokenPhase.values.firstWhere(
+    final phase = TokenPhase.values.firstWhere(
       (phase) => phase.name == info['currentPhase'],
-      orElse: () => AdvancedTokenService.TokenPhase.predicted,
+      orElse: () => TokenPhase.predicted,
     );
 
     return ModernCard(
@@ -366,20 +366,20 @@ class _TransferManagementScreenState extends State<TransferManagementScreen> {
     );
   }
 
-  Widget _buildPhaseRestrictions(AdvancedTokenService.TokenPhase phase) {
+  Widget _buildPhaseRestrictions(TokenPhase phase) {
     Color phaseColor;
     String restrictions;
     
     switch (phase) {
-      case AdvancedTokenService.TokenPhase.predicted:
+      case TokenPhase.predicted:
         phaseColor = Colors.blue;
         restrictions = 'Free trading with KYC requirements for large transfers';
         break;
-      case AdvancedTokenService.TokenPhase.harvesting:
+      case TokenPhase.harvesting:
         phaseColor = Colors.orange;
         restrictions = 'Restricted to authorized participants only';
         break;
-      case AdvancedTokenService.TokenPhase.settled:
+      case TokenPhase.settled:
         phaseColor = Colors.green;
         restrictions = 'Physical delivery rights - requires delivery capacity';
         break;
@@ -606,13 +606,13 @@ class _TransferManagementScreenState extends State<TransferManagementScreen> {
     );
   }
 
-  String _getPhaseDisplayName(AdvancedTokenService.TokenPhase phase) {
+  String _getPhaseDisplayName(TokenPhase phase) {
     switch (phase) {
-      case AdvancedTokenService.TokenPhase.predicted:
+      case TokenPhase.predicted:
         return 'Phase 1: Predicted';
-      case AdvancedTokenService.TokenPhase.harvesting:
+      case TokenPhase.harvesting:
         return 'Phase 2: Harvesting';
-      case AdvancedTokenService.TokenPhase.settled:
+      case TokenPhase.settled:
         return 'Phase 3: Settled';
     }
   }

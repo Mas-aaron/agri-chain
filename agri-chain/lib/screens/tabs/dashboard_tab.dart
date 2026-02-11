@@ -183,6 +183,21 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
     return Icons.cloud_outlined;
   }
 
+  String _imageUrlForCode(int code) {
+    // OpenWeatherMap icon set (no API key required for static icons)
+    // https://openweathermap.org/weather-conditions
+    if (code == 0) return 'https://openweathermap.org/img/wn/01d@4x.png';
+    if (code == 1 || code == 2) return 'https://openweathermap.org/img/wn/02d@4x.png';
+    if (code == 3) return 'https://openweathermap.org/img/wn/04d@4x.png';
+    if (code == 45 || code == 48) return 'https://openweathermap.org/img/wn/50d@4x.png';
+    if (code >= 51 && code <= 57) return 'https://openweathermap.org/img/wn/09d@4x.png';
+    if (code >= 61 && code <= 67) return 'https://openweathermap.org/img/wn/10d@4x.png';
+    if (code >= 71 && code <= 77) return 'https://openweathermap.org/img/wn/13d@4x.png';
+    if (code >= 80 && code <= 82) return 'https://openweathermap.org/img/wn/09d@4x.png';
+    if (code >= 95) return 'https://openweathermap.org/img/wn/11d@4x.png';
+    return 'https://openweathermap.org/img/wn/03d@4x.png';
+  }
+
   Color _accentForCode(BuildContext context, int code) {
     final scheme = Theme.of(context).colorScheme;
     if (code == 0) return const Color(0xFFF59E0B);
@@ -252,23 +267,27 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
         Widget trailing;
         IconData icon;
         Color accent;
+        String? imageUrl;
 
         if (isLoading) {
           subtitle = 'Loading…';
           trailing = const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2));
           icon = Icons.cloud_outlined;
           accent = Theme.of(context).colorScheme.primary;
+          imageUrl = null;
         } else if (hasError || data == null) {
           subtitle = 'Tap to retry';
           trailing = const Icon(Icons.refresh);
           icon = Icons.cloud_off_outlined;
           accent = Theme.of(context).colorScheme.onSurfaceVariant;
+          imageUrl = null;
         } else {
           final temp = data.temperatureC.toStringAsFixed(1);
           final wind = data.windSpeed.toStringAsFixed(0);
           subtitle = '${_describeCode(data.weatherCode)} • Wind ${wind}km/h';
           icon = _iconForCode(data.weatherCode);
           accent = _accentForCode(context, data.weatherCode);
+          imageUrl = _imageUrlForCode(data.weatherCode);
           trailing = Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
@@ -306,7 +325,16 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
                       color: accent.withOpacity(0.14),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(icon, color: accent, size: 28),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: imageUrl == null
+                          ? Icon(icon, color: accent, size: 28)
+                          : Image.network(
+                              imageUrl,
+                              fit: BoxFit.contain,
+                              errorBuilder: (_, __, ___) => Icon(icon, color: accent, size: 28),
+                            ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -457,18 +485,37 @@ class DashboardTab extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Expanded(child: _WeatherFeatureCard()),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: FeatureCard(
-                      icon: Icons.show_chart,
-                      title: 'Market prices',
-                      subtitle: 'Coming soon',
-                    ),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 520;
+                  if (isNarrow) {
+                    return const Column(
+                      children: [
+                        _WeatherFeatureCard(),
+                        SizedBox(height: 12),
+                        FeatureCard(
+                          icon: Icons.show_chart,
+                          title: 'Market prices',
+                          subtitle: 'Coming soon',
+                        ),
+                      ],
+                    );
+                  }
+
+                  return const Row(
+                    children: [
+                      Expanded(child: _WeatherFeatureCard()),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: FeatureCard(
+                          icon: Icons.show_chart,
+                          title: 'Market prices',
+                          subtitle: 'Coming soon',
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 18),
 

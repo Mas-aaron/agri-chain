@@ -1,7 +1,6 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
-    // Must be applied after the Android and Kotlin plugins
     id "dev.flutter.flutter-gradle-plugin"
 }
 
@@ -9,10 +8,32 @@ configurations.configureEach {
     exclude group: 'com.google.ai.edge.litert'
 }
 
-android {
-    namespace "com.example.agri_chain"     // REQUIRED
-    compileSdk 36                         // or 36 if you prefer
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withReader('UTF-8') { reader ->
+        localProperties.load(reader)
+    }
+}
 
+def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
+if (flutterVersionCode == null) {
+    flutterVersionCode = '1'
+}
+
+def flutterVersionName = localProperties.getProperty('flutter.versionName')
+if (flutterVersionName == null) {
+    flutterVersionName = '1.0'
+}
+
+android {
+    namespace "com.example.agri_chain"
+
+    ndkVersion "27.0.12077973"
+    
+    // Use compileSdk 36 as required by plugins
+    compileSdk 36
+    
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -24,16 +45,40 @@ android {
 
     defaultConfig {
         applicationId "com.example.agri_chain"
-        minSdkVersion flutter.minSdkVersion                           // 23 required for firebase_storage
-        targetSdk 34
-        versionCode flutter.versionCode
-        versionName flutter.versionName
+        minSdkVersion flutter.minSdkVersion
+        targetSdk 36  // Update to 36
+        versionCode flutterVersionCode.toInteger()
+        versionName flutterVersionName
+        
+        // NDK configuration
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
+        }
     }
 
+    // buildTypes {
+    //     release {
+    //         signingConfig signingConfigs.debug
+
+    //     }
+    // }
+    
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            // Use debug keys so you don't need a keystore file yet
+            signingConfig signingConfigs.debug 
+            
+            // ADD THESE THREE LINES for lightweight builds:
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+
+
+    // Add this if you're using ViewBinding or DataBinding
+    buildFeatures {
+        buildConfig true
     }
 }
 
@@ -42,7 +87,6 @@ flutter {
 }
 
 dependencies {
-    // Flex delegate requires BOTH base and select-tf-ops
     implementation 'org.tensorflow:tensorflow-lite:2.14.0'
     implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0'
 }

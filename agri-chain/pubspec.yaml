@@ -35,6 +35,8 @@ dependencies:
   # HTTP & Firebase
   http: ^1.1.2
   firebase_core: ^4.3.0
+  firebase_auth: ^6.0.0
+  cloud_firestore: ^6.0.0
   firebase_storage: ^13.0.5
   url_launcher: ^6.2.4
   geolocator: ^13.0.2

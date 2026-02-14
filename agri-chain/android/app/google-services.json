@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "540713348802",
+    "project_id": "agri-chain-models",
+    "storage_bucket": "agri-chain-models.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:540713348802:android:27969387188c1fa5d7155b",
+        "android_client_info": {
+          "package_name": "com.example.agri_chain"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzsadLe76q9qK8OzgmzY6aYAu7A11-c08"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

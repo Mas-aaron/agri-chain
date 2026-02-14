@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:agri_chain/services/tflite_service.dart';
+import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/providers/scan_provider.dart';
@@ -29,6 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (asDouble == null) return '—';
     final pct = asDouble <= 1.0 ? (asDouble * 100.0) : asDouble;
     return '${pct.toStringAsFixed(1)}%';
+  }
+
+  String _displayLabel(String label) {
+    return label.replaceAll('_', ' ').trim();
   }
 
   @override
@@ -84,9 +89,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? (confidence.toDouble() <= 1.0 ? confidence.toDouble() * 100.0 : confidence.toDouble())
                 : (double.tryParse('$confidence') ?? 0.0);
 
-            final severity = lower.contains('healthy')
+            final normalizedKey = label.replaceAll('_', ' ').trim().toLowerCase();
+            final isNonMaize = RecommendationService.isNonMaizeLabel(normalizedKey);
+
+            final severity = (lower.contains('healthy') || isNonMaize)
                 ? 'Low'
-                : (topPct >= 90.0 ? 'Critical' : (topPct >= 70.0 ? 'High' : 'Medium'));
+                : (topPct >= 90.0
+                    ? 'Critical'
+                    : (topPct >= 70.0 ? 'High' : 'Medium'));
 
             final top3 = predictions.take(3).map((p) {
               final pLabel = (p['label'] as String?) ?? 'Unknown';
@@ -100,8 +110,12 @@ class _HomeScreenState extends State<HomeScreen> {
             await context.read<AlertsProvider>().addAlert(
                   AlertItem(
                     id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    title: 'AI Health Alert: $label',
-                    message: 'Diagnosis result: $label (confidence: ${_formatConfidence(confidence)}).',
+                    title: isNonMaize
+                        ? 'AI Scan: Not a maize leaf'
+                        : 'AI Health Alert: ${_displayLabel(label)}',
+                    message: isNonMaize
+                        ? 'Result: Not a maize leaf. Please scan a clear maize leaf image (good lighting, in focus).'
+                        : 'Diagnosis result: ${_displayLabel(label)} (confidence: ${_formatConfidence(confidence)}).',
                     category: 'Health',
                     severity: severity,
                     createdAt: DateTime.now(),

@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+# Optional database (not used by current code yet).
+# When you migrate to SQLAlchemy + Postgres/MySQL, enable this and add DB env vars.
+#  db:
+#    image: postgres:16-alpine
+#    environment:
+#      POSTGRES_DB: agrichain
+#      POSTGRES_USER: agrichain
+#      POSTGRES_PASSWORD: change_me
+#    volumes:
+#      - pgdata:/var/lib/postgresql/data
+#    ports:
+#      - "5432:5432"
+#    restart: unless-stopped
+
+#volumes:
+#  pgdata:

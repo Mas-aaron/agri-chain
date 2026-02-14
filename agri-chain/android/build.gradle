@@ -18,6 +18,20 @@ allprojects {
     }
 }
 
+// Some older Flutter plugins (e.g. flutter_bluetooth_serial) still rely on the
+// AndroidManifest.xml package attribute and do not set the AGP 8+ `namespace`
+// field. Inject it here to keep builds working without patching pub cache.
+subprojects { subproject ->
+    afterEvaluate {
+        if (subproject.name == 'flutter_bluetooth_serial') {
+            def androidExt = subproject.extensions.findByName('android')
+            if (androidExt != null && androidExt.hasProperty('namespace') && androidExt.namespace == null) {
+                androidExt.namespace = 'io.github.edufolly.flutterbluetoothserial'
+            }
+        }
+    }
+}
+
 rootProject.buildDir = '../build'
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"

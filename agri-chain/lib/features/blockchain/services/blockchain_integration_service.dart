@@ -1,17 +1,14 @@
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:agri_chain/config/app_config.dart';
 import 'package:agri_chain/features/blockchain/config/blockchain_config.dart';
 import 'package:agri_chain/services/contracts_api_service.dart';
 
 /// Service for integrating blockchain features with backend contracts
 class BlockchainIntegrationService {
-  final http.Client _httpClient;
   final ContractsApiService _contractsApi;
 
   BlockchainIntegrationService({http.Client? httpClient, ContractsApiService? contractsApi})
-      : _httpClient = httpClient ?? http.Client(),
-        _contractsApi = contractsApi ?? ContractsApiService.fromBaseUrl(AppConfig.apiBaseUrl);
+      : _contractsApi = contractsApi ?? ContractsApiService.fromBaseUrl(AppConfig.apiBaseUrl);
 
   /// Create a blockchain-backed contract
   Future<Map<String, dynamic>> createBlockchainContract({

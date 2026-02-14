@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../config/blockchain_config.dart';
 
@@ -42,70 +41,8 @@ class Web3Service {
 
   /// Load contract ABI and address
   Future<void> _loadContract() async {
-    // AgriYield Contract ABI (simplified)
-    const contractAbi = '''[
-      {
-        "name": "createYieldToken",
-        "type": "function",
-        "inputs": [
-          {"name": "farmerId", "type": "string"},
-          {"name": "yieldAmount", "type": "uint256"},
-          {"name": "cropType", "type": "string"}
-        ],
-        "outputs": [{"name": "tokenId", "type": "uint256"}]
-      },
-      {
-        "name": "transferToken",
-        "type": "function",
-        "inputs": [
-          {"name": "to", "type": "address"},
-          {"name": "tokenId", "type": "uint256"}
-        ],
-        "outputs": [{"name": "success", "type": "bool"}]
-      },
-      {
-        "name": "getTokenInfo",
-        "type": "function",
-        "inputs": [{"name": "tokenId", "type": "uint256"}],
-        "outputs": [
-          {"name": "farmerId", "type": "string"},
-          {"name": "yieldAmount", "type": "uint256"},
-          {"name": "cropType", "type": "string"}
-        ]
-      }
-    ]''';
-
-    // Contract address must be compile-time provided for web builds.
-    final contractAddr = EthereumAddress.fromHex(_kContractAddressHex);
-    
-    _contractAddress = contractAddr;
-    _contract = DeployedContract(
-      ContractAbi.fromJson(contractAbi, 'AgriYieldToken'),
-      contractAddr,
-    );
-  }
-
-  /// Restore existing wallet or create new one
-  Future<void> _restoreWallet() async {
-    final prefs = await SharedPreferences.getInstance();
-    final mnemonic = prefs.getString('wallet_mnemonic');
-    
-    if (mnemonic != null && bip39.validateMnemonic(mnemonic)) {
-      final seed = bip39.mnemonicToSeed(mnemonic);
-      final master = await ED25519_HD_KEY.getMasterKeyFromSeed(seed);
-      final privateKey = bytesToHex(master.key);
-      
-      _credentials = EthPrivateKey.fromHex(privateKey);
-      _userAddress = _credentials!.address.hex;
-    }
-  }
-
-  EthPrivateKey _privateKeyFromMnemonic(String mnemonic) {
-    final seed = bip39.mnemonicToSeed(mnemonic);
-    // NOTE: This is a simplified deterministic derivation (seed[0..31]).
-    // For production wallets you should derive using BIP32/BIP44 paths.
-    final keyBytes = Uint8List.fromList(seed.sublist(0, 32));
-    return EthPrivateKey(keyBytes);
+    // Contract interactions are handled by the backend API in this project.
+    return;
   }
 
   /// Connect wallet (create new if none exists)
@@ -135,8 +72,6 @@ class Web3Service {
     try {
       if (!_isConnected) {
         throw Exception('Wallet not connected');
-      if (!_isConnected) {
-        throw Exception('Web3 not initialized');
       }
 
       final res = await _httpClient
@@ -234,22 +169,6 @@ class Web3Service {
       }
 
       return jsonDecode(res.body) as Map<String, dynamic>;
-      if (!_isConnected || _contract == null) {
-        throw Exception('Web3 not properly initialized');
-      }
-
-      final function = _contract!.function('getTokenInfo');
-      final result = await _client.call(
-        contract: _contract!,
-        function: function,
-        params: [tokenId],
-      );
-
-      return {
-        'farmerId': result[0] as String,
-        'yieldAmount': result[1] as BigInt,
-        'cropType': result[2] as String,
-      };
     } catch (e) {
       throw Exception('Failed to get token info: $e');
     }
@@ -262,30 +181,6 @@ class Web3Service {
     required String amount,
   }) async {
     throw Exception('Signing is handled by the backend');
-    try {
-      if (!_isConnected || _credentials == null) {
-        throw Exception('Wallet not connected');
-      }
-
-      // Optional sanity check: ensure the provided "from" matches current wallet.
-      final fromAddr = EthereumAddress.fromHex(from);
-      if (fromAddr != _credentials!.address) {
-        throw Exception('From address does not match connected wallet');
-      }
-      final toAddr = EthereumAddress.fromHex(to);
-      final amountWei = BigInt.parse(amount) * BigInt.from(10).pow(18);
-
-      final transaction = Transaction(
-        to: toAddr,
-        value: EtherAmount.fromUnitAndValue(EtherUnit.wei, amountWei),
-        maxGas: 21000,
-      );
-
-      final signedTx = await _client.signTransaction(_credentials!, transaction, chainId: 1);
-      return bytesToHex(signedTx);
-    } catch (e) {
-      throw Exception('Failed to sign transaction: $e');
-    }
   }
 
   /// Send a transaction (legacy method)

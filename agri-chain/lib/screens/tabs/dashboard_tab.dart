@@ -10,6 +10,7 @@ import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/services/weather_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/rover/rover_entry_screen.dart';
 
 Color _alpha(Color c, double opacity) {
   final a = (opacity * 255).round().clamp(0, 255);
@@ -482,6 +483,16 @@ class DashboardTab extends StatelessWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const BlockchainHubScreen()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              FeatureCard(
+                icon: Icons.smart_toy_outlined,
+                title: 'ESP32 Rover',
+                subtitle: 'Connect and control your rover (WiFi / Bluetooth)',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RoverEntryScreen()),
                 ),
               ),
               const SizedBox(height: 10),

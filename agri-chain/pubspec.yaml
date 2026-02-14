@@ -10,6 +10,11 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  web_socket_channel: ^2.4.0
+  flutter_bluetooth_serial: ^0.4.0
+  flutter_joystick: ^0.0.3
+  loading_animation_widget: ^1.2.0
+  connectivity_plus: ^5.0.2
   
   # TensorFlow Lite - Use ONLY ONE of these
   tflite_flutter: ^0.12.1  # Modern, recommended

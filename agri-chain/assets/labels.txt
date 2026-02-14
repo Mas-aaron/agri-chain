@@ -2,3 +2,5 @@ Blight
 Common_Rust
 Gray_Leaf_Spot
 Healthy
+Maize_Streak_Virus
+Negative_Image

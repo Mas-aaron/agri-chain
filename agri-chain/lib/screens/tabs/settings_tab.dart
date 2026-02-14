@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/features/admin/screens/admin_entry_screen.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
@@ -38,6 +39,17 @@ class SettingsTab extends StatelessWidget {
           icon: Icons.privacy_tip_outlined,
           title: 'Data & privacy',
           subtitle: 'Coming soon',
+        ),
+        const SizedBox(height: 10),
+        FeatureCard(
+          icon: Icons.admin_panel_settings_outlined,
+          title: 'Admin',
+          subtitle: 'Manage suppliers and agrochemicals',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AdminEntryScreen()),
+            );
+          },
         ),
       ],
     );

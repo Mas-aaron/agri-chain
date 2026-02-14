@@ -35,11 +35,16 @@ class ResultsScreen extends StatelessWidget {
     return label.replaceAll('_', ' ').trim().toLowerCase();
   }
 
+  String _displayLabel(String label) {
+    return label.replaceAll('_', ' ').trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final topPrediction = predictions.first;
     final rec = RecommendationService.recommendForLabel((topPrediction['label'] as String?) ?? '');
     final isHealthy = rec.isHealthy;
+    final isNonMaize = rec.isNonMaize;
 
     return Scaffold(
       appBar: AppBar(
@@ -61,7 +66,7 @@ class ResultsScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Diagnosis Card
-            _buildDiagnosisCard(isHealthy, topPrediction),
+            _buildDiagnosisCard(isHealthy, isNonMaize, topPrediction),
             const SizedBox(height: 24),
 
             // Confidence Bars
@@ -106,17 +111,40 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDiagnosisCard(bool isHealthy, Map<String, dynamic> prediction) {
+  Widget _buildDiagnosisCard(
+    bool isHealthy,
+    bool isNonMaize,
+    Map<String, dynamic> prediction,
+  ) {
     final percentage = _asDouble(prediction['percentage']);
+    final label = (prediction['label'] as String?) ?? '';
+    final display = _displayLabel(label);
+
+    final header = isNonMaize
+        ? 'Scan not recognized'
+        : (isHealthy ? 'Healthy Leaf' : 'Disease detected');
+
+    final icon = isNonMaize
+        ? Icons.info_outline
+        : (isHealthy ? Icons.check_circle : Icons.warning);
+
+    final iconColor = isNonMaize
+        ? Colors.orange
+        : (isHealthy ? Colors.green : Colors.orange);
+
+    final cardColor = isNonMaize
+        ? Colors.orange[50]
+        : (isHealthy ? Colors.green[50] : Colors.orange[50]);
+
     return Card(
-      color: isHealthy ? Colors.green[50] : Colors.orange[50],
+      color: cardColor,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
             Icon(
-              isHealthy ? Icons.check_circle : Icons.warning,
-              color: isHealthy ? Colors.green : Colors.orange,
+              icon,
+              color: iconColor,
               size: 40,
             ),
             const SizedBox(width: 20),
@@ -125,7 +153,7 @@ class ResultsScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isHealthy ? 'Healthy Leaf' : 'Disease Detected',
+                    header,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -133,12 +161,23 @@ class ResultsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    prediction['label'],
+                    display.isEmpty ? 'Unknown' : display,
                     style: TextStyle(
                       fontSize: 16,
                       color: Colors.grey[700],
                     ),
                   ),
+                  if (isNonMaize) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Try scanning a clear maize leaf image in good lighting.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[700],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ] else ...[
                   const SizedBox(height: 8),
                   Text(
                     'Confidence: ${percentage.toStringAsFixed(1)}%',
@@ -147,6 +186,7 @@ class ResultsScreen extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  ],
                 ],
               ),
             ),
@@ -170,7 +210,7 @@ class ResultsScreen extends StatelessWidget {
         const SizedBox(height: 12),
         ...predictions.map((pred) {
           return ConfidenceBar(
-            label: pred['label'],
+            label: _displayLabel((pred['label'] as String?) ?? 'Unknown'),
             percentage: _asDouble(pred['percentage']),
             isTop: predictions.indexOf(pred) == 0,
           );
@@ -320,7 +360,8 @@ class ResultsScreen extends StatelessWidget {
 
       final lower = _normalizeLabel(label);
       final pct = _asDouble(confidence);
-      final severity = lower.contains('healthy')
+      final isNonMaize = RecommendationService.isNonMaizeLabel(lower);
+      final severity = (lower.contains('healthy') || isNonMaize)
           ? 'Low'
           : (pct >= 90.0 ? 'Critical' : (pct >= 70.0 ? 'High' : 'Medium'));
 
@@ -336,8 +377,12 @@ class ResultsScreen extends StatelessWidget {
       await context.read<AlertsProvider>().addAlert(
             AlertItem(
               id: DateTime.now().millisecondsSinceEpoch.toString(),
-              title: 'Manual Alert: $label',
-              message: 'Result: $label (confidence: ${_formatPercent(confidence)}).',
+              title: isNonMaize
+                  ? 'Manual Scan: Not a maize leaf'
+                  : 'Manual Alert: ${_displayLabel(label)}',
+              message: isNonMaize
+                  ? 'Result: Not a maize leaf. Please scan a clear maize leaf image.'
+                  : 'Result: ${_displayLabel(label)} (confidence: ${_formatPercent(confidence)}).',
               category: 'Health',
               severity: severity,
               createdAt: DateTime.now(),
@@ -373,6 +418,9 @@ class ResultsScreen extends StatelessWidget {
     }
     if (key.contains('healthy')) {
       return 'Your maize plant appears healthy. Continue with regular monitoring, watering, and fertilization.';
+    }
+    if (key.contains('maize streak') || (key.contains('streak') && key.contains('virus')) || key.contains('msv')) {
+      return 'Maize streak virus is viral and cannot be cured with fungicides. Remove severely infected plants early, control leafhoppers (vectors) using approved insect control methods, keep fields weed-free, and plant resistant/tolerant varieties where available.';
     }
     if (key.contains('blight')) {
       return 'Remove heavily infected leaves. Avoid overhead irrigation. Consider an approved fungicide and rotate crops next season.';
@@ -425,6 +473,29 @@ class ResultsScreen extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Leaf looks healthy. No chemicals recommended. Continue monitoring and good agronomic practices.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (rec.normalizedKey.contains('maize streak') ||
+        (rec.normalizedKey.contains('streak') && rec.normalizedKey.contains('virus')) ||
+        rec.normalizedKey.contains('msv')) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, color: scheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Maize streak virus is viral. No fungicides are recommended. Focus on resistant varieties, vector (leafhopper) control, and removing heavily infected plants early.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),

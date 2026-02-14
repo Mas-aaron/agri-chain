@@ -78,6 +78,20 @@ class YieldContractDto {
 
   double get total => quantityKg * unitPrice;
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'crop': crop,
+        'quantity_kg': quantityKg,
+        'unit_price': unitPrice,
+        'currency': currency,
+        'status': status,
+        'farmer_name': farmerName,
+        if (buyerName != null) 'buyer_name': buyerName,
+        if (evidenceHash != null) 'evidence_hash': evidenceHash,
+        'created_at': createdAt.toIso8601String(),
+        'total': total,
+      };
+
   factory YieldContractDto.fromJson(Map<String, dynamic> json) {
     final qtyRaw = json['quantity_kg'];
     final unitRaw = json['unit_price'];
@@ -114,6 +128,15 @@ class LedgerEventDto {
     required this.contractId,
     required this.meta,
   });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'time': time.toIso8601String(),
+        'action': action,
+        'actor': actor,
+        'contract_id': contractId,
+        'meta': meta,
+      };
 
   factory LedgerEventDto.fromJson(Map<String, dynamic> json) {
     final tRaw = json['time'];

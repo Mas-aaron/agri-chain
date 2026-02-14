@@ -1,143 +1,33 @@
 import 'package:flutter/foundation.dart';
-import 'web3_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../config/blockchain_config.dart';
 
 /// Service for testing blockchain functionality
 class BlockchainTestService {
-  final Web3Service _web3Service = Web3Service();
+  final http.Client _httpClient;
+
+  BlockchainTestService({http.Client? httpClient}) : _httpClient = httpClient ?? http.Client();
+
+  Uri _u(String path) => Uri.parse('${BlockchainConfig.apiBaseUrl}$path');
 
   /// Run comprehensive blockchain tests
   Future<Map<String, dynamic>> runAllTests() async {
-    final results = <String, dynamic>{};
-    
-    // Test 1: Initialize Web3
-    results['initialize'] = await _testInitialize();
-    
-    // Test 2: Wallet Connection
-    if (results['initialize']['success']) {
-      results['wallet_connection'] = await _testWalletConnection();
-    }
-    
-    // Test 3: Balance Query
-    if (_web3Service.isConnected) {
-      results['balance_query'] = await _testBalanceQuery();
-    }
-    
-    // Test 4: Gas Price
-    results['gas_price'] = await _testGasPrice();
-    
-    // Test 5: Contract Interaction (if connected)
-    if (_web3Service.isConnected) {
-      results['contract_interaction'] = await _testContractInteraction();
-    }
-    
-    return results;
-  }
+    final res = await _httpClient
+        .post(_u('/tests/run'), headers: {'Accept': 'application/json'})
+        .timeout(BlockchainConfig.apiTimeout);
 
-  /// Test Web3 initialization
-  Future<Map<String, dynamic>> _testInitialize() async {
-    try {
-      final success = await _web3Service.initialize();
+    if (res.statusCode != 200) {
       return {
-        'success': success,
-        'message': success ? 'Web3 initialized successfully' : 'Web3 initialization failed',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Web3 initialization error: $e',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
-  }
-
-  /// Test wallet connection
-  Future<Map<String, dynamic>> _testWalletConnection() async {
-    try {
-      final success = await _web3Service.connectWallet();
-      return {
-        'success': success,
-        'message': success ? 'Wallet connected successfully' : 'Wallet connection failed',
-        'address': _web3Service.userAddress,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Wallet connection error: $e',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
-  }
-
-  /// Test balance query
-  Future<Map<String, dynamic>> _testBalanceQuery() async {
-    try {
-      if (_web3Service.userAddress == null) {
-        return {
+        'initialize': {
           'success': false,
-          'message': 'No wallet address available',
+          'message': 'Backend test failed (HTTP ${res.statusCode})',
           'timestamp': DateTime.now().toIso8601String(),
-        };
-      }
-
-      final balance = await _web3Service.getBalance(_web3Service.userAddress!);
-      return {
-        'success': true,
-        'message': 'Balance query successful',
-        'balance': balance,
-        'address': _web3Service.userAddress,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Balance query error: $e',
-        'timestamp': DateTime.now().toIso8601String(),
+        }
       };
     }
-  }
 
-  /// Test gas price query
-  Future<Map<String, dynamic>> _testGasPrice() async {
-    try {
-      final gasPrice = await _web3Service.getGasPrice();
-      return {
-        'success': true,
-        'message': 'Gas price query successful',
-        'gasPrice': gasPrice,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Gas price query error: $e',
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
-  }
-
-  /// Test contract interaction
-  Future<Map<String, dynamic>> _testContractInteraction() async {
-    try {
-      // Test token info query (this should work even without creating tokens)
-      final tokenInfo = await _web3Service.getTokenInfo(BigInt.from(1));
-      
-      return {
-        'success': true,
-        'message': 'Contract interaction test successful',
-        'contractAddress': BlockchainConfig.contractAddress,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Contract interaction error: $e',
-        'contractAddress': BlockchainConfig.contractAddress,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   /// Test yield token creation
@@ -147,24 +37,31 @@ class BlockchainTestService {
     required String cropType,
   }) async {
     try {
-      if (!_web3Service.isConnected) {
+      final res = await _httpClient
+          .post(
+            _u('/yield-token'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'farmerId': farmerId,
+              'yieldAmount': yieldAmount.toString(),
+              'cropType': cropType,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
         return {
           'success': false,
-          'message': 'Wallet not connected',
+          'message': 'Yield token creation failed (HTTP ${res.statusCode})',
           'timestamp': DateTime.now().toIso8601String(),
         };
       }
 
-      final txHash = await _web3Service.createYieldToken(
-        farmerId: farmerId,
-        yieldAmount: yieldAmount,
-        cropType: cropType,
-      );
-
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
       return {
         'success': true,
         'message': 'Yield token creation successful',
-        'transactionHash': txHash,
+        'transactionHash': data['transactionHash'],
         'farmerId': farmerId,
         'yieldAmount': yieldAmount.toString(),
         'cropType': cropType,
@@ -182,13 +79,26 @@ class BlockchainTestService {
   /// Test transaction status
   Future<Map<String, dynamic>> testTransactionStatus(String txHash) async {
     try {
-      final status = await _web3Service.getTransactionStatus(txHash);
-      
+      final res = await _httpClient
+          .get(_u('/transactions/$txHash'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        return {
+          'success': false,
+          'message': 'Transaction status query failed (HTTP ${res.statusCode})',
+          'transactionHash': txHash,
+          'timestamp': DateTime.now().toIso8601String(),
+        };
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+
       return {
         'success': true,
         'message': 'Transaction status query successful',
         'transactionHash': txHash,
-        'confirmed': status,
+        'confirmed': data['confirmed'] ?? false,
         'timestamp': DateTime.now().toIso8601String(),
       };
     } catch (e) {
@@ -207,8 +117,8 @@ class BlockchainTestService {
       'contractAddress': BlockchainConfig.contractAddress,
       'chainId': BlockchainConfig.chainId,
       'enableWeb3Integration': BlockchainConfig.enableWeb3Integration,
-      'isConnected': _web3Service.isConnected,
-      'userAddress': _web3Service.userAddress,
+      'isConnected': null,
+      'userAddress': null,
       'timestamp': DateTime.now().toIso8601String(),
     };
   }

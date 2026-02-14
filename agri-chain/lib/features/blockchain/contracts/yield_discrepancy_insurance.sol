@@ -86,7 +86,18 @@ contract YieldDiscrepancyInsurance is Ownable, ReentrancyGuard {
     // Oracle addresses
     address public yieldOracle;
     address public priceOracle;
-    mapping(string => address) public authorizedOracles;
+    mapping(uint256 => address) public authorizedOracles;
+    mapping(address => bool) public authorizedOracleAddresses;
+
+    modifier onlyOracle() {
+        require(
+            msg.sender == yieldOracle ||
+                msg.sender == priceOracle ||
+                authorizedOracleAddresses[msg.sender],
+            "Not authorized oracle"
+        );
+        _;
+    }
     
     // Events
     event PolicyCreated(
@@ -331,7 +342,7 @@ contract YieldDiscrepancyInsurance is Ownable, ReentrancyGuard {
         uint256 validSources = 0;
         
         for (uint256 i = 0; i < oracleSourceIds.length; i++) {
-            address oracle = authorizedOracles[uint256(keccak256(abi.encodePacked(oracleSourceIds[i])))];
+            address oracle = authorizedOracles[oracleSourceIds[i]];
             if (oracle != address(0)) {
                 // In a real implementation, this would query the oracle
                 yields[validSources] = actualYield; // Simplified - would get from oracle
@@ -388,6 +399,9 @@ contract YieldDiscrepancyInsurance is Ownable, ReentrancyGuard {
         uint256 consensus,
         uint256 count
     ) internal pure returns (uint256) {
+        if (count == 0 || consensus == 0) {
+            return 0;
+        }
         uint256 totalDeviation = 0;
         
         for (uint256 i = 0; i < count; i++) {
@@ -470,19 +484,42 @@ contract YieldDiscrepancyInsurance is Ownable, ReentrancyGuard {
      * @dev Admin functions
      */
     function addAuthorizedOracle(string memory oracleId, address oracleAddress) external onlyOwner {
-        authorizedOracles[oracleId] = oracleAddress;
+        uint256 id = uint256(keccak256(abi.encodePacked(oracleId)));
+        address prev = authorizedOracles[id];
+        if (prev != address(0)) {
+            authorizedOracleAddresses[prev] = false;
+        }
+        authorizedOracles[id] = oracleAddress;
+        authorizedOracleAddresses[oracleAddress] = true;
     }
 
     function removeAuthorizedOracle(string memory oracleId) external onlyOwner {
-        authorizedOracles[oracleId] = address(0);
+        uint256 id = uint256(keccak256(abi.encodePacked(oracleId)));
+        address prev = authorizedOracles[id];
+        if (prev != address(0)) {
+            authorizedOracleAddresses[prev] = false;
+        }
+        authorizedOracles[id] = address(0);
     }
 
     function setYieldOracle(address oracle) external onlyOwner {
+        if (yieldOracle != address(0)) {
+            authorizedOracleAddresses[yieldOracle] = false;
+        }
         yieldOracle = oracle;
+        if (oracle != address(0)) {
+            authorizedOracleAddresses[oracle] = true;
+        }
     }
 
     function setPriceOracle(address oracle) external onlyOwner {
+        if (priceOracle != address(0)) {
+            authorizedOracleAddresses[priceOracle] = false;
+        }
         priceOracle = oracle;
+        if (oracle != address(0)) {
+            authorizedOracleAddresses[oracle] = true;
+        }
     }
 
     function updateMinReserveRatio(uint256 newRatio) external onlyOwner {

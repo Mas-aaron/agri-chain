@@ -35,13 +35,13 @@ class _WalletScreenState extends State<WalletScreen> {
 
     try {
       final success = await _web3Service.initialize();
-      if (success && _web3Service.isConnected) {
-        // Wallet already exists and is connected
-        if (mounted) {
-          setState(() {
-            _isConnecting = false;
-          });
-        }
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+          if (!success) {
+            _connectionError = 'Failed to initialize wallet';
+          }
+        });
       }
     } catch (e) {
       if (mounted) {

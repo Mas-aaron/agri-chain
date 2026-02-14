@@ -1,7 +1,6 @@
 import 'dart:convert';
-import 'package:web3dart/web3dart.dart';
 import 'package:http/http.dart' as http;
-import 'package:agri_chain/config/app_config.dart';
+import '../config/blockchain_config.dart';
 import 'web3_service.dart';
 
 /// Token phases for transfer restrictions
@@ -28,6 +27,8 @@ class AdvancedTokenService {
       : _web3Service = web3Service ?? Web3Service(),
         _httpClient = httpClient ?? http.Client();
 
+  Uri _u(String path) => Uri.parse('${BlockchainConfig.apiBaseUrl}$path');
+
   /// Create transferable yield token with phase-based restrictions
   Future<Map<String, dynamic>> createTransferableYieldToken({
     required String farmerId,
@@ -41,49 +42,25 @@ class AdvancedTokenService {
         throw Exception('Wallet not connected');
       }
 
-      // Convert to blockchain units
-      final predictedYieldWei = BigInt.from(predictedYield * 1e18);
-      final harvestTimestamp = harvestDate.millisecondsSinceEpoch ~/ 1000;
+      final res = await _httpClient
+          .post(
+            _u('/advanced/tokenize'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'farmerId': farmerId,
+              'cropType': cropType,
+              'predictedYield': predictedYield,
+              'harvestDate': harvestDate.toIso8601String(),
+              'insuranceTier': insuranceTier.name,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
 
-      // Create token through smart contract
-      final contract = await _web3Service.getContract();
-      final function = contract.function('mintYieldToken');
-      final txHash = await _web3Service.client.sendTransaction(
-        _web3Service.getCredentials(),
-        Transaction.callContract(
-          contract: contract,
-          function: function,
-          parameters: [
-            EthereumAddress.fromHex(_web3Service.userAddress!),
-            cropType,
-            predictedYieldWei,
-            BigInt.from(harvestTimestamp),
-          ],
-        ),
-        chainId: 1,
-      );
+      if (res.statusCode != 200) {
+        throw Exception('Advanced tokenization failed');
+      }
 
-      final tokenId = BigInt.from(DateTime.now().millisecondsSinceEpoch);
-
-      // Create insurance policy
-      final insuranceResult = await createInsurancePolicy(
-        tokenId: tokenId,
-        farmerId: farmerId,
-        predictedYield: predictedYield,
-        tier: insuranceTier,
-      );
-
-      return {
-        'success': true,
-        'tokenId': tokenId.toString(),
-        'farmerId': farmerId,
-        'cropType': cropType,
-        'predictedYield': predictedYield,
-        'harvestDate': harvestDate.toIso8601String(),
-        'currentPhase': TokenPhase.predicted.name,
-        'insurancePolicy': insuranceResult,
-        'transactionHash': txHash,
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       return {
         'success': false,
@@ -105,52 +82,23 @@ class AdvancedTokenService {
         throw Exception('Wallet not connected');
       }
 
-      // Validate transfer eligibility
-      final validationResult = await _validateTransfer(
-        tokenId: tokenId,
-        fromAddress: _web3Service.userAddress!,
-        toAddress: toAddress,
-        amount: amount,
-      );
+      final res = await _httpClient
+          .post(
+            _u('/advanced/transfer'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'tokenId': tokenId.toString(),
+              'toAddress': toAddress,
+              'amount': amount,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
 
-      if (!validationResult['isValid']) {
-        return {
-          'success': false,
-          'error': validationResult['error'],
-          'message': 'Transfer validation failed',
-        };
+      if (res.statusCode != 200) {
+        throw Exception('Transfer failed');
       }
 
-      // Execute transfer
-      final contract = await _web3Service.getContract();
-      final amountWei = BigInt.from(amount * 1e18);
-
-      final function = contract.function('safeTransferFrom');
-      final txHash = await _web3Service.client.sendTransaction(
-        _web3Service.getCredentials(),
-        Transaction.callContract(
-          contract: contract,
-          function: function,
-          parameters: [
-            EthereumAddress.fromHex(_web3Service.userAddress!),
-            EthereumAddress.fromHex(toAddress),
-            tokenId,
-            amountWei,
-            transferMetadata ?? '',
-          ],
-        ),
-        chainId: 1,
-      );
-
-      return {
-        'success': true,
-        'tokenId': tokenId.toString(),
-        'fromAddress': _web3Service.userAddress,
-        'toAddress': toAddress,
-        'amount': amount,
-        'transactionHash': txHash,
-        'phase': validationResult['currentPhase'],
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       return {
         'success': false,
@@ -160,68 +108,7 @@ class AdvancedTokenService {
     }
   }
 
-  /// Validate transfer according to phase-based restrictions
-  Future<Map<String, dynamic>> _validateTransfer({
-    required BigInt tokenId,
-    required String fromAddress,
-    required String toAddress,
-    required double amount,
-  }) async {
-    try {
-      final contract = await _web3Service.getContract();
-      
-      // Get token info and phase
-      final tokenInfoFn = contract.function('getTokenInfo');
-      final phaseFn = contract.function('tokenPhases');
-      final tokenInfo = await _web3Service.client.call(
-        contract: contract,
-        function: tokenInfoFn,
-        params: [tokenId],
-      );
-      final phase = await _web3Service.client.call(
-        contract: contract,
-        function: phaseFn,
-        params: [tokenId],
-      );
-      
-      final currentPhase = TokenPhase.values[int.parse('${phase.first}')];
-      final predictedYield = double.parse(tokenInfo[4].toString()) / 1e18;
-      final harvestDate = DateTime.fromMillisecondsSinceEpoch(
-        int.parse(tokenInfo[6].toString()) * 1000,
-      );
-
-      // Phase-based validation
-      switch (currentPhase) {
-        case TokenPhase.predicted:
-          return await _validatePredictedPhaseTransfer(
-            fromAddress: fromAddress,
-            toAddress: toAddress,
-            amount: amount,
-            predictedYield: predictedYield,
-          );
-          
-        case TokenPhase.harvesting:
-          return await _validateHarvestingPhaseTransfer(
-            fromAddress: fromAddress,
-            toAddress: toAddress,
-            amount: amount,
-          );
-          
-        case TokenPhase.settled:
-          return await _validateSettledPhaseTransfer(
-            fromAddress: fromAddress,
-            toAddress: toAddress,
-            amount: amount,
-          );
-      }
-    } catch (e) {
-      return {
-        'isValid': false,
-        'error': e.toString(),
-        'currentPhase': null,
-      };
-    }
-  }
+  /// NOTE: Validation and phase rules are enforced server-side in Fabric implementation.
 
   /// Validate transfers in predicted phase (free trading with restrictions)
   Future<Map<String, dynamic>> _validatePredictedPhaseTransfer({
@@ -320,47 +207,24 @@ class AdvancedTokenService {
     required InsuranceTier tier,
   }) async {
     try {
-      final contract = await _web3Service.getInsuranceContract();
-      
-      // Calculate insurance parameters
-      final coverageRate = _getCoverageRate(tier);
-      final premiumRate = _getPremiumRate(tier);
-      final insuredAmount = predictedYield * 1e18; // Assuming 1 ETH per kg
-      final premium = insuredAmount * premiumRate / 10000;
-      
-      // Create policy
-      final function = contract.function('createPolicy');
-      final txHash = await _web3Service.client.sendTransaction(
-        _web3Service.getCredentials(),
-        Transaction.callContract(
-          contract: contract,
-          function: function,
-          parameters: [
-            EthereumAddress.fromHex(_web3Service.userAddress!),
-            tokenId,
-            BigInt.from(predictedYield * 1e18),
-            BigInt.from(insuredAmount),
-            BigInt.from(tier.index),
-          ],
-          value: EtherAmount.inWei(BigInt.from(premium)),
-        ),
-        chainId: 1,
-      );
+      final res = await _httpClient
+          .post(
+            _u('/insurance/policy'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'tokenId': tokenId.toString(),
+              'farmerId': farmerId,
+              'predictedYield': predictedYield,
+              'tier': tier.name,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
 
-      final policyId = BigInt.from(DateTime.now().millisecondsSinceEpoch);
+      if (res.statusCode != 200) {
+        throw Exception('Failed to create insurance policy');
+      }
 
-      return {
-        'success': true,
-        'policyId': policyId.toString(),
-        'tokenId': tokenId.toString(),
-        'farmerId': farmerId,
-        'predictedYield': predictedYield,
-        'insuredAmount': insuredAmount / 1e18,
-        'premium': premium / 1e18,
-        'coverageRate': coverageRate,
-        'tier': tier.name,
-        'transactionHash': txHash,
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       return {
         'success': false,
@@ -377,66 +241,22 @@ class AdvancedTokenService {
     List<String>? oracleSourceIds,
   }) async {
     try {
-      final contract = await _web3Service.getContract();
-      
-      // Submit actual yield to oracle
-      final oracleReport = await _submitYieldToOracle(
-        tokenId: tokenId,
-        actualYield: actualYield,
-        sourceIds: oracleSourceIds ?? ['government', 'satellite', 'local'],
-      );
+      final res = await _httpClient
+          .post(
+            _u('/yield/process'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'tokenId': tokenId.toString(),
+              'actualYield': actualYield,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
 
-      if (!oracleReport['isVerified']) {
-        return {
-          'success': false,
-          'error': 'Oracle consensus not reached',
-          'confidence': oracleReport['confidence'],
-        };
+      if (res.statusCode != 200) {
+        throw Exception('Failed to process actual yield');
       }
 
-      // Process actual yield on blockchain
-      final function = contract.function('processActualYield');
-      final txHash = await _web3Service.client.sendTransaction(
-        _web3Service.getCredentials(),
-        Transaction.callContract(
-          contract: contract,
-          function: function,
-          parameters: [
-            tokenId,
-            BigInt.from(actualYield * 1e18),
-          ],
-        ),
-        chainId: 1,
-      );
-
-      // Calculate discrepancy
-      final tokenInfoFn = contract.function('getTokenInfo');
-      final tokenInfo = await _web3Service.client.call(
-        contract: contract,
-        function: tokenInfoFn,
-        params: [tokenId],
-      );
-      final predictedYield = double.parse(tokenInfo[4].toString()) / 1e18;
-      final discrepancy = predictedYield - actualYield;
-      final discrepancyPercentage = (discrepancy / predictedYield) * 100;
-
-      // Trigger insurance if needed
-      Map<String, dynamic>? insuranceClaim;
-      if (discrepancyPercentage > 5) {
-        insuranceClaim = await _triggerInsuranceClaim(tokenId, discrepancy);
-      }
-
-      return {
-        'success': true,
-        'tokenId': tokenId.toString(),
-        'predictedYield': predictedYield,
-        'actualYield': actualYield,
-        'discrepancy': discrepancy,
-        'discrepancyPercentage': discrepancyPercentage,
-        'oracleReport': oracleReport,
-        'insuranceClaim': insuranceClaim,
-        'transactionHash': txHash,
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       return {
         'success': false,
@@ -492,41 +312,23 @@ class AdvancedTokenService {
   /// Trigger insurance claim for major discrepancies
   Future<Map<String, dynamic>?> _triggerInsuranceClaim(BigInt tokenId, double discrepancy) async {
     try {
-      final contract = await _web3Service.getInsuranceContract();
-      
-      // Get policy for this token
-      final policyFn = contract.function('getInsurancePolicy');
-      final policy = await _web3Service.client.call(
-        contract: contract,
-        function: policyFn,
-        params: [tokenId],
-      );
-      if (policy[0] == BigInt.zero) {
-        return null; // No policy exists
+      final res = await _httpClient
+          .post(
+            _u('/insurance/claim'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'tokenId': tokenId.toString(),
+              'discrepancy': discrepancy,
+              'policyId': null,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        return null;
       }
 
-      // Process claim
-      final function = contract.function('processDiscrepancyClaim');
-      final txHash = await _web3Service.client.sendTransaction(
-        _web3Service.getCredentials(),
-        Transaction.callContract(
-          contract: contract,
-          function: function,
-          parameters: [
-            policy[0], // policyId
-            BigInt.from(discrepancy * 1e18),
-            [1, 2, 3], // oracle source IDs
-          ],
-        ),
-        chainId: 1,
-      );
-
-      return {
-        'policyId': policy[0].toString(),
-        'claimAmount': discrepancy,
-        'discrepancyPercentage': 0.0,
-        'transactionHash': txHash,
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       return {
         'success': false,
@@ -538,44 +340,15 @@ class AdvancedTokenService {
   /// Get comprehensive token information
   Future<Map<String, dynamic>> getTokenInfo(BigInt tokenId) async {
     try {
-      final contract = await _web3Service.getContract();
+      final res = await _httpClient
+          .get(_u('/token-info/${tokenId.toString()}'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
 
-      final tokenInfoFn = contract.function('getTokenInfo');
-      final phaseFn = contract.function('tokenPhases');
+      if (res.statusCode != 200) {
+        throw Exception('Token info query failed');
+      }
 
-      final tokenInfo = await _web3Service.client.call(
-        contract: contract,
-        function: tokenInfoFn,
-        params: [tokenId],
-      );
-      final phase = await _web3Service.client.call(
-        contract: contract,
-        function: phaseFn,
-        params: [tokenId],
-      );
-      final currentPhase = TokenPhase.values[int.parse('${phase.first}')];
-
-      return {
-        'tokenId': tokenId.toString(),
-        'farmerId': tokenInfo[1],
-        'cropType': tokenInfo[2],
-        'predictedYield': double.parse(tokenInfo[3].toString()) / 1e18,
-        'actualYield': double.parse(tokenInfo[4].toString()) / 1e18,
-        'harvestDate': DateTime.fromMillisecondsSinceEpoch(
-          int.parse(tokenInfo[5].toString()) * 1000,
-        ).toIso8601String(),
-        'currentPhase': currentPhase.name,
-        'originalFarmer': tokenInfo[6].toString(),
-        'createdAt': DateTime.fromMillisecondsSinceEpoch(
-          int.parse(tokenInfo[7].toString()) * 1000,
-        ).toIso8601String(),
-        'settledAt': int.parse(tokenInfo[8].toString()) > 0
-            ? DateTime.fromMillisecondsSinceEpoch(
-                int.parse(tokenInfo[8].toString()) * 1000,
-              ).toIso8601String()
-            : null,
-        'isActive': tokenInfo[9],
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       return {
         'success': false,

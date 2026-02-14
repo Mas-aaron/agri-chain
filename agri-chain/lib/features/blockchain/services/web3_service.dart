@@ -1,48 +1,38 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:web3dart/web3dart.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:bip39/bip39.dart' as bip39;
-import 'package:ed25519_hd_key/ed25519_hd_key.dart';
-import 'package:agri_chain/config/app_config.dart';
-
- const String _kContractAddressHex = String.fromEnvironment(
-   'CONTRACT_ADDRESS',
-   defaultValue: '0x0000000000000000000000000000000000000000',
- );
-
- const int _kChainId = int.fromEnvironment(
-   'CHAIN_ID',
-   defaultValue: 1,
- );
+import '../config/blockchain_config.dart';
 
 /// Service for Web3 and blockchain interactions
 class Web3Service {
-  late Web3Client _client;
-  Credentials? _credentials;
-  EthereumAddress? _contractAddress;
-  DeployedContract? _contract;
-  
+  final http.Client _httpClient;
+
   String? _userAddress;
   bool _isConnected = false;
 
   String? get userAddress => _userAddress;
   bool get isConnected => _isConnected;
-  Web3Client get client => _client;
+
+  Web3Service({http.Client? httpClient}) : _httpClient = httpClient ?? http.Client();
+
+  Uri _u(String path) => Uri.parse('${BlockchainConfig.apiBaseUrl}$path');
 
   /// Initialize Web3 connection
   Future<bool> initialize() async {
     try {
-      _client = Web3Client(AppConfig.blockchainRpcUrl, http.Client());
-      
-      // Load contract ABI and address
-      await _loadContract();
-      
-      // Try to restore existing wallet
-      await _restoreWallet();
-      
-      _isConnected = true;
+      final res = await _httpClient
+          .get(_u('/wallet/status'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        _isConnected = false;
+        _userAddress = null;
+        return false;
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      _isConnected = (data['isConnected'] as bool?) ?? false;
+      _userAddress = (data['address'] as String?)?.isNotEmpty == true ? data['address'] as String : null;
       return true;
     } catch (e) {
       _isConnected = false;
@@ -50,86 +40,22 @@ class Web3Service {
     }
   }
 
-  /// Load contract ABI and address
-  Future<void> _loadContract() async {
-    // AgriYield Contract ABI (simplified)
-    const contractAbi = '''[
-      {
-        "name": "createYieldToken",
-        "type": "function",
-        "inputs": [
-          {"name": "farmerId", "type": "string"},
-          {"name": "yieldAmount", "type": "uint256"},
-          {"name": "cropType", "type": "string"}
-        ],
-        "outputs": [{"name": "tokenId", "type": "uint256"}]
-      },
-      {
-        "name": "transferToken",
-        "type": "function",
-        "inputs": [
-          {"name": "to", "type": "address"},
-          {"name": "tokenId", "type": "uint256"}
-        ],
-        "outputs": [{"name": "success", "type": "bool"}]
-      },
-      {
-        "name": "getTokenInfo",
-        "type": "function",
-        "inputs": [{"name": "tokenId", "type": "uint256"}],
-        "outputs": [
-          {"name": "farmerId", "type": "string"},
-          {"name": "yieldAmount", "type": "uint256"},
-          {"name": "cropType", "type": "string"}
-        ]
-      }
-    ]''';
-
-    // Contract address must be compile-time provided for web builds.
-    final contractAddr = EthereumAddress.fromHex(_kContractAddressHex);
-    
-    _contractAddress = contractAddr;
-    _contract = DeployedContract(
-      ContractAbi.fromJson(contractAbi, 'AgriYieldToken'),
-      contractAddr,
-    );
-  }
-
-  /// Restore existing wallet or create new one
-  Future<void> _restoreWallet() async {
-    final prefs = await SharedPreferences.getInstance();
-    final mnemonic = prefs.getString('wallet_mnemonic');
-    
-    if (mnemonic != null && bip39.validateMnemonic(mnemonic)) {
-      final seed = bip39.mnemonicToSeed(mnemonic);
-      final master = await ED25519_HD_KEY.getMasterKeyFromSeed(seed);
-      final privateKey = bytesToHex(master.key);
-      
-      _credentials = EthPrivateKey.fromHex(privateKey);
-      _userAddress = _credentials!.address.hex;
-    }
-  }
-
   /// Connect wallet (create new if none exists)
   Future<bool> connectWallet() async {
     try {
-      if (_credentials == null) {
-        // Generate new mnemonic and wallet
-        final mnemonic = bip39.generateMnemonic();
-        final seed = bip39.mnemonicToSeed(mnemonic);
-        final master = await ED25519_HD_KEY.getMasterKeyFromSeed(seed);
-        final privateKey = bytesToHex(master.key);
-        
-        // Save mnemonic securely
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('wallet_mnemonic', mnemonic);
-        
-        _credentials = EthPrivateKey.fromHex(privateKey);
+      final res = await _httpClient
+          .post(_u('/wallet/connect'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        _isConnected = false;
+        return false;
       }
-      
-      _userAddress = _credentials!.address.hex;
-      _isConnected = true;
-      return true;
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      _isConnected = (data['success'] as bool?) ?? true;
+      _userAddress = (data['address'] as String?) ?? _userAddress;
+      return _isConnected;
     } catch (e) {
       _isConnected = false;
       return false;
@@ -139,16 +65,21 @@ class Web3Service {
   /// Get user's wallet balance
   Future<String> getBalance(String address) async {
     try {
-      if (!_isConnected || _client == null) {
-        throw Exception('Web3 not initialized');
+      if (!_isConnected) {
+        throw Exception('Wallet not connected');
       }
-      
-      final addr = EthereumAddress.fromHex(address);
-      final balance = await _client.getBalance(addr);
-      
-      // Convert from Wei to Ether
-      final etherBalance = balance.getValueInUnit(EtherUnit.ether);
-      return etherBalance.toStringAsFixed(6);
+
+      final res = await _httpClient
+          .get(_u('/wallet/balance'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        throw Exception('Balance query failed');
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final balance = (data['balance'] as String?) ?? '0.0';
+      return balance;
     } catch (e) {
       throw Exception('Failed to get balance: $e');
     }
@@ -161,25 +92,28 @@ class Web3Service {
     required String cropType,
   }) async {
     try {
-      if (!_isConnected || _credentials == null || _contract == null) {
-        throw Exception('Web3 not properly initialized');
+      if (!_isConnected) {
+        throw Exception('Wallet not connected');
       }
 
-      final function = _contract!.function('createYieldToken');
-      final transaction = Transaction.callContract(
-        contract: _contract!,
-        function: function,
-        parameters: [farmerId, yieldAmount, cropType],
-        maxGas: 100000,
-      );
+      final res = await _httpClient
+          .post(
+            _u('/yield-token'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'farmerId': farmerId,
+              'yieldAmount': yieldAmount.toString(),
+              'cropType': cropType,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
 
-      final signedTx = await _client.sendTransaction(
-        _credentials!,
-        transaction,
-        chainId: _kChainId,
-      );
+      if (res.statusCode != 200) {
+        throw Exception('Tokenization failed');
+      }
 
-      return signedTx;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return (data['transactionHash'] as String?) ?? '';
     } catch (e) {
       throw Exception('Failed to create yield token: $e');
     }
@@ -191,26 +125,28 @@ class Web3Service {
     required BigInt tokenId,
   }) async {
     try {
-      if (!_isConnected || _credentials == null || _contract == null) {
-        throw Exception('Web3 not properly initialized');
+      if (!_isConnected) {
+        throw Exception('Wallet not connected');
       }
 
-      final to = EthereumAddress.fromHex(toAddress);
-      final function = _contract!.function('transferToken');
-      final transaction = Transaction.callContract(
-        contract: _contract!,
-        function: function,
-        parameters: [to, tokenId],
-        maxGas: 100000,
-      );
+      final res = await _httpClient
+          .post(
+            _u('/advanced/transfer'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({
+              'tokenId': tokenId.toString(),
+              'toAddress': toAddress,
+              'amount': 1.0,
+            }),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
 
-      final signedTx = await _client.sendTransaction(
-        _credentials!,
-        transaction,
-        chainId: _kChainId,
-      );
+      if (res.statusCode != 200) {
+        throw Exception('Transfer failed');
+      }
 
-      return signedTx;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return (data['transactionHash'] as String?) ?? '';
     } catch (e) {
       throw Exception('Failed to transfer token: $e');
     }
@@ -219,22 +155,15 @@ class Web3Service {
   /// Get token information
   Future<Map<String, dynamic>> getTokenInfo(BigInt tokenId) async {
     try {
-      if (!_isConnected || _client == null || _contract == null) {
-        throw Exception('Web3 not properly initialized');
+      final res = await _httpClient
+          .get(_u('/token-info/${tokenId.toString()}'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        throw Exception('Token info query failed');
       }
 
-      final function = _contract!.function('getTokenInfo');
-      final result = await _client.call(
-        contract: _contract!,
-        function: function,
-        params: [tokenId],
-      );
-
-      return {
-        'farmerId': result[0] as String,
-        'yieldAmount': result[1] as BigInt,
-        'cropType': result[2] as String,
-      };
+      return jsonDecode(res.body) as Map<String, dynamic>;
     } catch (e) {
       throw Exception('Failed to get token info: $e');
     }
@@ -246,26 +175,7 @@ class Web3Service {
     required String to,
     required String amount,
   }) async {
-    try {
-      if (!_isConnected || _credentials == null) {
-        throw Exception('Wallet not connected');
-      }
-
-      final fromAddr = EthereumAddress.fromHex(from);
-      final toAddr = EthereumAddress.fromHex(to);
-      final amountWei = BigInt.parse(amount) * BigInt.from(10).pow(18);
-
-      final transaction = Transaction(
-        to: toAddr,
-        value: EtherAmount.fromUnitAndValue(EtherUnit.wei, amountWei),
-        maxGas: 21000,
-      );
-
-      final signedTx = await _client.signTransaction(_credentials!, transaction, chainId: 1);
-      return bytesToHex(signedTx);
-    } catch (e) {
-      throw Exception('Failed to sign transaction: $e');
-    }
+    throw Exception('Signing is handled by the backend');
   }
 
   /// Send a transaction (legacy method)
@@ -275,11 +185,20 @@ class Web3Service {
     required String amount,
   }) async {
     try {
-      final signedTx = await signTransaction(from: from, to: to, amount: amount);
-      final signedBytes = hexToBytes(signedTx);
-      
-      final txHash = await _client.sendRawTransaction(Uint8List.fromList(signedBytes));
-      return txHash;
+      final res = await _httpClient
+          .post(
+            _u('/transactions/send'),
+            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            body: jsonEncode({'from': from, 'to': to, 'amount': amount}),
+          )
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        throw Exception('Transaction failed');
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return (data['transactionHash'] as String?) ?? '';
     } catch (e) {
       throw Exception('Failed to send transaction: $e');
     }
@@ -288,12 +207,16 @@ class Web3Service {
   /// Get transaction status
   Future<bool> getTransactionStatus(String txHash) async {
     try {
-      if (!_isConnected || _client == null) {
-        throw Exception('Web3 not initialized');
+      final res = await _httpClient
+          .get(_u('/transactions/$txHash'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        return false;
       }
 
-      final receipt = await _client.getTransactionReceipt(txHash);
-      return receipt != null && receipt.status == true;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return (data['confirmed'] as bool?) ?? false;
     } catch (e) {
       return false;
     }
@@ -303,17 +226,14 @@ class Web3Service {
   void disconnect() {
     _userAddress = null;
     _isConnected = false;
-    _credentials = null;
+    _httpClient.post(_u('/wallet/disconnect'), headers: {'Accept': 'application/json'});
   }
 
   /// Check if address is valid
   static bool isValidAddress(String address) {
-    try {
-      EthereumAddress.fromHex(address);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    final a = address.trim();
+    final re = RegExp(r'^0x[a-fA-F0-9]{40}$');
+    return re.hasMatch(a);
   }
 
   /// Format address for display (0x1234...5678)
@@ -325,12 +245,16 @@ class Web3Service {
   /// Get current gas price
   Future<String> getGasPrice() async {
     try {
-      if (!_isConnected || _client == null) {
-        throw Exception('Web3 not initialized');
+      final res = await _httpClient
+          .get(_u('/gas-price'), headers: {'Accept': 'application/json'})
+          .timeout(BlockchainConfig.apiTimeout);
+
+      if (res.statusCode != 200) {
+        throw Exception('Gas price query failed');
       }
 
-      final gasPrice = await _client.getGasPrice();
-      return gasPrice.getValueInUnit(EtherUnit.gwei).toStringAsFixed(2);
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return (data['gasPrice'] as String?) ?? '0.0';
     } catch (e) {
       throw Exception('Failed to get gas price: $e');
     }
@@ -341,43 +265,7 @@ class Web3Service {
     required String to,
     String? data,
   }) async {
-    try {
-      if (!_isConnected || _client == null || _credentials == null) {
-        throw Exception('Web3 not initialized');
-      }
-
-      final toAddr = EthereumAddress.fromHex(to);
-      final gasEstimate = await _client.estimateGas(
-        to: toAddr,
-        data: data != null ? Uint8List.fromList(hexToBytes(data)) : null,
-      );
-      
-      return gasEstimate;
-    } catch (e) {
-      throw Exception('Failed to estimate gas: $e');
-    }
-  }
-
-  /// Get credentials for signing
-  Credentials getCredentials() {
-    if (_credentials == null) {
-      throw Exception('Wallet not connected');
-    }
-    return _credentials!;
-  }
-
-  /// Get contract instance
-  Future<DeployedContract> getContract() async {
-    if (_contract == null) {
-      await _loadContract();
-    }
-    return _contract!;
-  }
-
-  /// Get insurance contract instance
-  Future<DeployedContract> getInsuranceContract() async {
-    // For now, return the same contract - would be separate in real implementation
-    return getContract();
+    return BigInt.from(21000);
   }
 }
 

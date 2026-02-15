@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'rover/providers/rover_provider.dart';
-import 'rover/rover_entry_screen.dart';
+import 'splash_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,8 +22,13 @@ class MyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const RoverEntryScreen(),
+        home: const SplashScreen(),
       ),
     );
   }
 }
+// Connect (initial + reconnect)
+// Control (main driving + camera)
+// Sensors (telemetry dashboard)
+// Map/Nav (GPS-focused)
+// Settings (gear icon, or extra tab)

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -446,6 +448,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
+  Timer? _pressTimer;
 
   bool _isLeftPressed = false;
   bool _isRightPressed = false;
@@ -472,6 +475,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
 
   @override
   void dispose() {
+    _pressTimer?.cancel();
     _animationController.dispose();
     super.dispose();
   }
@@ -702,12 +706,17 @@ class _RoverControlScreenState extends State<RoverControlScreen>
             icon: Icons.arrow_upward,
             label: 'FORWARD',
             onTapDown: () {
+              _pressTimer?.cancel();
               provider.sendCommand(RoverCommand.forward);
               setState(() => _isForwardPressed = true);
             },
             onTapUp: () {
-              provider.sendCommand(RoverCommand.stop);
-              setState(() => _isForwardPressed = false);
+              _pressTimer = Timer(const Duration(milliseconds: 100), () {
+                if (mounted) {
+                  provider.sendCommand(RoverCommand.stop);
+                  setState(() => _isForwardPressed = false);
+                }
+              });
             },
             isPressed: _isForwardPressed,
             color: Colors.green,
@@ -722,12 +731,17 @@ class _RoverControlScreenState extends State<RoverControlScreen>
               icon: Icons.arrow_back,
               label: 'LEFT',
               onTapDown: () {
+                _pressTimer?.cancel();
                 provider.sendCommand(RoverCommand.left);
                 setState(() => _isLeftPressed = true);
               },
               onTapUp: () {
-                provider.sendCommand(RoverCommand.stop);
-                setState(() => _isLeftPressed = false);
+                _pressTimer = Timer(const Duration(milliseconds: 100), () {
+                  if (mounted) {
+                    provider.sendCommand(RoverCommand.stop);
+                    setState(() => _isLeftPressed = false);
+                  }
+                });
               },
               isPressed: _isLeftPressed,
               color: Colors.orange,
@@ -752,12 +766,17 @@ class _RoverControlScreenState extends State<RoverControlScreen>
               icon: Icons.arrow_forward,
               label: 'RIGHT',
               onTapDown: () {
+                _pressTimer?.cancel();
                 provider.sendCommand(RoverCommand.right);
                 setState(() => _isRightPressed = true);
               },
               onTapUp: () {
-                provider.sendCommand(RoverCommand.stop);
-                setState(() => _isRightPressed = false);
+                _pressTimer = Timer(const Duration(milliseconds: 100), () {
+                  if (mounted) {
+                    provider.sendCommand(RoverCommand.stop);
+                    setState(() => _isRightPressed = false);
+                  }
+                });
               },
               isPressed: _isRightPressed,
               color: Colors.orange,
@@ -771,12 +790,17 @@ class _RoverControlScreenState extends State<RoverControlScreen>
             icon: Icons.arrow_downward,
             label: 'BACKWARD',
             onTapDown: () {
+              _pressTimer?.cancel();
               provider.sendCommand(RoverCommand.backward);
               setState(() => _isBackwardPressed = true);
             },
             onTapUp: () {
-              provider.sendCommand(RoverCommand.stop);
-              setState(() => _isBackwardPressed = false);
+              _pressTimer = Timer(const Duration(milliseconds: 100), () {
+                if (mounted) {
+                  provider.sendCommand(RoverCommand.stop);
+                  setState(() => _isBackwardPressed = false);
+                }
+              });
             },
             isPressed: _isBackwardPressed,
             color: Colors.red,
@@ -795,12 +819,17 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           icon: Icons.rotate_left,
           label: 'ROTATE L',
           onTapDown: () {
+            _pressTimer?.cancel();
             provider.sendCommand(RoverCommand.rotateLeft);
             setState(() => _isRotateLeftPressed = true);
           },
           onTapUp: () {
-            provider.sendCommand(RoverCommand.stop);
-            setState(() => _isRotateLeftPressed = false);
+            _pressTimer = Timer(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                provider.sendCommand(RoverCommand.stop);
+                setState(() => _isRotateLeftPressed = false);
+              }
+            });
           },
           isPressed: _isRotateLeftPressed,
           color: Colors.purple,
@@ -811,12 +840,17 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           icon: Icons.rotate_right,
           label: 'ROTATE R',
           onTapDown: () {
+            _pressTimer?.cancel();
             provider.sendCommand(RoverCommand.rotateRight);
             setState(() => _isRotateRightPressed = true);
           },
           onTapUp: () {
-            provider.sendCommand(RoverCommand.stop);
-            setState(() => _isRotateRightPressed = false);
+            _pressTimer = Timer(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                provider.sendCommand(RoverCommand.stop);
+                setState(() => _isRotateRightPressed = false);
+              }
+            });
           },
           isPressed: _isRotateRightPressed,
           color: Colors.purple,

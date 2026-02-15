@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"agrichain-server/internal/auth"
 	"agrichain-server/internal/api/response"
+	"agrichain-server/internal/auth"
 	"agrichain-server/internal/storage/sqlite"
 
 	"github.com/gin-gonic/gin"
@@ -80,5 +80,64 @@ func RequireAnyRole(roles ...string) gin.HandlerFunc {
 		resp := response.NewError("FORBIDDEN", "insufficient role", map[string]any{"required": roles, "have": ac.Roles})
 		c.JSON(http.StatusForbidden, resp)
 		c.Abort()
+	}
+}
+
+func RequireAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		v, ok := c.Get("auth")
+		if !ok {
+			resp := response.NewError("UNAUTHORIZED", "not authenticated", nil)
+			c.JSON(http.StatusUnauthorized, resp)
+			c.Abort()
+			return
+		}
+		if _, ok := v.(AuthContext); !ok {
+			resp := response.NewError("UNAUTHORIZED", "invalid auth context", nil)
+			c.JSON(http.StatusUnauthorized, resp)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func RequireKYCApproved(db *sqlite.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		v, ok := c.Get("auth")
+		if !ok {
+			resp := response.NewError("UNAUTHORIZED", "not authenticated", nil)
+			c.JSON(http.StatusUnauthorized, resp)
+			c.Abort()
+			return
+		}
+		ac, ok := v.(AuthContext)
+		if !ok {
+			resp := response.NewError("UNAUTHORIZED", "invalid auth context", nil)
+			c.JSON(http.StatusUnauthorized, resp)
+			c.Abort()
+			return
+		}
+		for _, r := range ac.Roles {
+			if r == "admin" {
+				c.Next()
+				return
+			}
+		}
+
+		status, err := db.GetKYCStatus(c.Request.Context(), ac.UID)
+		if err != nil {
+			resp := response.NewError("INTERNAL", "failed to load kyc status", map[string]any{"error": err.Error()})
+			c.JSON(http.StatusInternalServerError, resp)
+			c.Abort()
+			return
+		}
+		if strings.ToLower(strings.TrimSpace(status)) != "approved" {
+			resp := response.NewError("KYC_REQUIRED", "kyc not approved", map[string]any{"status": status})
+			c.JSON(http.StatusForbidden, resp)
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 }

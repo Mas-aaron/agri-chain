@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class ContractCreateRequest {
@@ -165,6 +166,22 @@ class ContractsApiService {
 
   const ContractsApiService(this.baseUri);
 
+  Future<String?> _idToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    return user.getIdToken();
+  }
+
+  Map<String, String> _headers({String? idToken}) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (idToken != null && idToken.trim().isNotEmpty) {
+      headers['Authorization'] = 'Bearer $idToken';
+    }
+    return headers;
+  }
+
   static Uri _normalizeBaseUrl(String baseUrl) {
     final trimmed = baseUrl.trim();
     if (trimmed.isEmpty) {
@@ -187,11 +204,11 @@ class ContractsApiService {
   }
 
   Future<List<YieldContractDto>> listContracts({String? status}) async {
+    final idToken = await _idToken();
+    final path = idToken == null ? '/contracts' : '/v1/contracts';
     final resp = await http.get(
-      _url('/contracts', query: status == null ? null : {'status': status}),
-      headers: const {
-        'Content-Type': 'application/json',
-      },
+      _url(path, query: status == null ? null : {'status': status}),
+      headers: _headers(idToken: idToken),
     );
 
     if (resp.statusCode >= 400) {
@@ -210,11 +227,11 @@ class ContractsApiService {
   }
 
   Future<YieldContractDto> createContract(ContractCreateRequest request) async {
+    final idToken = await _idToken();
+    final path = idToken == null ? '/contracts' : '/v1/contracts';
     final resp = await http.post(
-      _url('/contracts'),
-      headers: const {
-        'Content-Type': 'application/json',
-      },
+      _url(path),
+      headers: _headers(idToken: idToken),
       body: jsonEncode(request.toJson()),
     );
 
@@ -231,11 +248,11 @@ class ContractsApiService {
   }
 
   Future<YieldContractDto> purchaseContract(String contractId, ContractPurchaseRequest request) async {
+    final idToken = await _idToken();
+    final path = idToken == null ? '/contracts/$contractId/purchase' : '/v1/contracts/$contractId/purchase';
     final resp = await http.post(
-      _url('/contracts/$contractId/purchase'),
-      headers: const {
-        'Content-Type': 'application/json',
-      },
+      _url(path),
+      headers: _headers(idToken: idToken),
       body: jsonEncode(request.toJson()),
     );
 
@@ -252,11 +269,11 @@ class ContractsApiService {
   }
 
   Future<YieldContractDto> deliverContract(String contractId, ContractDeliverRequest request) async {
+    final idToken = await _idToken();
+    final path = idToken == null ? '/contracts/$contractId/deliver' : '/v1/contracts/$contractId/deliver';
     final resp = await http.post(
-      _url('/contracts/$contractId/deliver'),
-      headers: const {
-        'Content-Type': 'application/json',
-      },
+      _url(path),
+      headers: _headers(idToken: idToken),
       body: jsonEncode(request.toJson()),
     );
 
@@ -273,16 +290,16 @@ class ContractsApiService {
   }
 
   Future<List<LedgerEventDto>> listLedger({String? contractId, int limit = 100}) async {
+    final idToken = await _idToken();
+    final path = idToken == null ? '/ledger' : '/v1/ledger';
     final query = <String, String>{'limit': '$limit'};
     if (contractId != null && contractId.trim().isNotEmpty) {
       query['contract_id'] = contractId.trim();
     }
 
     final resp = await http.get(
-      _url('/ledger', query: query),
-      headers: const {
-        'Content-Type': 'application/json',
-      },
+      _url(path, query: query),
+      headers: _headers(idToken: idToken),
     );
 
     if (resp.statusCode >= 400) {

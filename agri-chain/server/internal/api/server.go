@@ -50,11 +50,37 @@ func NewServer(addr string) *Server {
 	legacyHandler := legacy.Handler()
 	blockchainSvc := blockchain.NewService()
 
+	handlers.NewContractsHandler(db).RegisterPublic(r)
+	handlers.NewPredictProxyHandler(cfg.MLBaseURL).RegisterPublic(r)
+
 	v1 := r.Group("/v1")
 	if verifier != nil {
 		v1.Use(middleware.FirebaseAuth(verifier, db))
 	}
+	v1.Use(middleware.RequireAuth())
 	handlers.NewMeHandler(db).Register(v1)
+	handlers.NewKYCHandler(db).RegisterSelf(v1)
+	handlers.NewDevicesHandler(db).Register(v1)
+	{
+		admin := v1.Group("", middleware.RequireAnyRole("admin"))
+		handlers.NewAdminRolesHandler(db).Register(admin)
+		handlers.NewAdminUsersHandler(db).Register(admin)
+	}
+	{
+		reg := v1.Group("", middleware.RequireAnyRole("admin", "regulator"))
+		handlers.NewKYCHandler(db).RegisterAdmin(reg)
+	}
+	ch := handlers.NewContractsHandler(db)
+	ch.RegisterV1ReadOnly(v1)
+	{
+		farmer := v1.Group("", middleware.RequireAnyRole("farmer", "admin"), middleware.RequireKYCApproved(db))
+		ch.RegisterV1FarmerActions(farmer)
+	}
+	{
+		buyer := v1.Group("", middleware.RequireAnyRole("bank", "investor", "admin"), middleware.RequireKYCApproved(db))
+		ch.RegisterV1BuyerActions(buyer)
+	}
+	handlers.NewPredictProxyHandler(cfg.MLBaseURL).RegisterV1(v1)
 	handlers.NewTransferHandler(blockchainSvc).Register(v1)
 
 	r.GET("/healthz", func(c *gin.Context) {

@@ -8,6 +8,7 @@ type Config struct {
 	Port                    string
 	SQLitePath              string
 	FirebaseCredentialsPath string
+	MLBaseURL               string
 }
 
 func Load() Config {
@@ -20,5 +21,9 @@ func Load() Config {
 		sqlitePath = "./data/agrichain.db"
 	}
 	credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	return Config{Port: port, SQLitePath: sqlitePath, FirebaseCredentialsPath: credsPath}
+	mlBaseURL := os.Getenv("ML_BASE_URL")
+	if mlBaseURL == "" {
+		mlBaseURL = "http://127.0.0.1:8001"
+	}
+	return Config{Port: port, SQLitePath: sqlitePath, FirebaseCredentialsPath: credsPath, MLBaseURL: mlBaseURL}
 }

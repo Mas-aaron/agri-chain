@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class YieldPredictionRequest {
@@ -66,6 +67,22 @@ class YieldApiService {
 
   const YieldApiService(this.baseUri);
 
+  Future<String?> _idToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    return user.getIdToken();
+  }
+
+  Map<String, String> _headers({String? idToken}) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (idToken != null && idToken.trim().isNotEmpty) {
+      headers['Authorization'] = 'Bearer $idToken';
+    }
+    return headers;
+  }
+
   static Uri _normalizeBaseUrl(String baseUrl) {
     final trimmed = baseUrl.trim();
     if (trimmed.isEmpty) {
@@ -87,11 +104,11 @@ class YieldApiService {
   }
 
   Future<YieldPredictionResponse> predict(YieldPredictionRequest request) async {
+    final idToken = await _idToken();
+    final path = idToken == null ? '/predict' : '/v1/predict';
     final resp = await http.post(
-      _url('/predict'),
-      headers: const {
-        'Content-Type': 'application/json',
-      },
+      _url(path),
+      headers: _headers(idToken: idToken),
       body: jsonEncode(request.toJson()),
     );
 

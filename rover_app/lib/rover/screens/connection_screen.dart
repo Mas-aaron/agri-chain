@@ -449,6 +449,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
   Timer? _pressTimer;
+  int _currentSpeed = 255;
 
   bool _isLeftPressed = false;
   bool _isRightPressed = false;
@@ -471,6 +472,12 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     );
 
     _animationController.forward();
+
+    // Initialize speed from provider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final provider = Provider.of<RoverProvider>(context, listen: false);
+      setState(() => _currentSpeed = provider.status.speed);
+    });
   }
 
   @override
@@ -531,6 +538,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                           _buildMainControls(provider),
                           const SizedBox(height: 30),
                           _buildRotationControls(provider),
+                          const SizedBox(height: 30),
+                          _buildSpeedControl(provider),
                           const SizedBox(height: 30),
                           _buildEmergencyStop(provider),
                           const SizedBox(height: 20),
@@ -857,6 +866,83 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           size: 100,
         ),
       ],
+    );
+  }
+
+  Widget _buildSpeedControl(RoverProvider provider) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.shade200, width: 2),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Rover Speed',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$_currentSpeed',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Slider(
+            value: _currentSpeed.toDouble(),
+            min: 0,
+            max: 255,
+            divisions: 51,
+            onChanged: (value) {
+              setState(() => _currentSpeed = value.toInt());
+              provider.setSpeed(_currentSpeed);
+            },
+            activeColor: Colors.blue,
+            inactiveColor: Colors.blue.shade200,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Slow',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade600,
+                ),
+              ),
+              Text(
+                'Maximum',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.blue.shade600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

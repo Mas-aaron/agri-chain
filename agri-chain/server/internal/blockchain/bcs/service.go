@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 )
 
 type BCSService struct {
@@ -15,9 +17,17 @@ func NewBCSService(client Client) *BCSService {
 	return &BCSService{client: client}
 }
 
+func chaincodeName() string {
+	cc := strings.TrimSpace(os.Getenv("BCS_CHAINCODE_NAME"))
+	if cc == "" {
+		cc = "agriyield"
+	}
+	return cc
+}
+
 func (s *BCSService) CreateYieldAsset(ctx context.Context, args CreateYieldAssetArgs) (string, error) {
 	payload, _ := json.Marshal(args)
-	resp, err := s.client.InvokeChaincode(ctx, []string{"agri_yield", "CreateYieldAsset", string(payload)})
+	resp, err := s.client.InvokeChaincode(ctx, []string{chaincodeName(), "CreateYieldAsset", string(payload)})
 	if err != nil {
 		return "", err
 	}
@@ -35,7 +45,7 @@ func (s *BCSService) CreateYieldAsset(ctx context.Context, args CreateYieldAsset
 
 func (s *BCSService) TransferTokens(ctx context.Context, args TransferTokensArgs) (string, error) {
 	payload, _ := json.Marshal(args)
-	resp, err := s.client.InvokeChaincode(ctx, []string{"agri_yield", "TransferTokens", string(payload)})
+	resp, err := s.client.InvokeChaincode(ctx, []string{chaincodeName(), "TransferTokens", string(payload)})
 	if err != nil {
 		return "", err
 	}
@@ -53,7 +63,7 @@ func (s *BCSService) TransferTokens(ctx context.Context, args TransferTokensArgs
 
 func (s *BCSService) UpdateActualYield(ctx context.Context, args UpdateActualYieldArgs) (string, error) {
 	payload, _ := json.Marshal(args)
-	resp, err := s.client.InvokeChaincode(ctx, []string{"agri_yield", "UpdateActualYield", string(payload)})
+	resp, err := s.client.InvokeChaincode(ctx, []string{chaincodeName(), "UpdateActualYield", string(payload)})
 	if err != nil {
 		return "", err
 	}

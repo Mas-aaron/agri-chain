@@ -3,6 +3,8 @@ package bcs
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 )
 
 type Client interface {
@@ -12,6 +14,10 @@ type Client interface {
 type mockClient struct{}
 
 func NewClient() Client {
+	endpoint := strings.TrimSpace(os.Getenv("BCS_ENDPOINT"))
+	if endpoint != "" {
+		return NewHTTPClientFromEnv()
+	}
 	return &mockClient{}
 }
 

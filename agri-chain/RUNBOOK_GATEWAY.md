@@ -20,18 +20,28 @@ This project runs as a **two-service** backend:
 
 ### Go gateway (`agri-chain/server`)
 
-- `PORT`
-  - Default: `8000`
-- `SQLITE_PATH`
-  - Default: `./data/agrichain.db`
-  - Recommended (shared central DB): an absolute path, e.g.
-    - `c:\Users\Hp\Desktop\agrichain\data\agrichain.db`
-- `ML_BASE_URL`
-  - Default: `http://127.0.0.1:8001`
-  - Should point at the Python ML service base URL
-- `GOOGLE_APPLICATION_CREDENTIALS`
-  - Path to a **Firebase service account JSON**
-  - This is **not** `google-services.json` (Android client config)
+- `PORT` (default `8000`)
+- `SQLITE_PATH` (default `./data/agrichain.db`)
+- `ML_BASE_URL` (default `http://127.0.0.1:8001`)
+- `GOOGLE_APPLICATION_CREDENTIALS` (optional; enables Firebase auth for `/v1/*`)
+
+### Yield Prediction Integration
+
+- `YIELD_API_BASE_URL` (optional)
+  - If empty, it defaults to `ML_BASE_URL`.
+  - Set this to your external Yield API base URL if you want the gateway to call it directly.
+
+### Huawei Blockchain Cloud Service (BCS)
+
+- `BLOCKCHAIN_MODE`
+  - `mock` (default): no external blockchain dependency
+  - `bcs`: enable Huawei BCS adapter
+- `BCS_ENDPOINT`
+  - Full HTTP URL for invoking chaincode (tenant-specific).
+  - If empty, the BCS client falls back to a local mock.
+- `BCS_ACCESS_KEY`, `BCS_SECRET_KEY`
+  - Optional headers used by the built-in HTTP client.
+  - If your BCS gateway uses a different auth mechanism, adjust `internal/blockchain/bcs/http_client.go`.
 
 ### Python ML service (`backend/backend`)
 
@@ -88,11 +98,11 @@ Flutter uses `AppConfig.apiBaseUrl`.
 - iOS simulator: `http://localhost:8000`
 - Physical device: `http://<your-pc-lan-ip>:8000`
 
-## API overview
+## API Overview
 
 ### Public endpoints (no auth)
 
-- `POST /predict` (proxies to Python ML service)
+- `POST /predict` (proxies to ML service)
 - `GET /contracts`
 - `POST /contracts`
 - `POST /contracts/{id}/purchase`

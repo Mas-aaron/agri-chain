@@ -20,6 +20,10 @@ func HTTPStatusForCode(code string) int {
 	switch code {
 	case "VALIDATION_ERROR":
 		return http.StatusBadRequest
+	case "UNAUTHORIZED":
+		return http.StatusUnauthorized
+	case "FORBIDDEN":
+		return http.StatusForbidden
 	case "KYC_REQUIRED":
 		return http.StatusForbidden
 	case "PHASE_RESTRICTED":
@@ -30,6 +34,12 @@ func HTTPStatusForCode(code string) int {
 		return http.StatusForbidden
 	case "NOT_FOUND":
 		return http.StatusNotFound
+	case "UPSTREAM_UNAVAILABLE":
+		return http.StatusBadGateway
+	case "UPSTREAM_ERROR":
+		return http.StatusBadGateway
+	case "BCS_ERROR":
+		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
 	}

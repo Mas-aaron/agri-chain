@@ -140,7 +140,6 @@ class _AlertsTabState extends State<AlertsTab> {
       case _AlertsFilter.critical:
         return input.where((a) => a.severity.toLowerCase().contains('critical')).toList();
       case _AlertsFilter.all:
-      default:
         return input;
     }
   }

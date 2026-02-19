@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
 import 'package:agri_chain/features/blockchain/services/web3_service.dart';
+import 'package:agri_chain/features/blockchain/config/blockchain_config.dart';
 import 'package:agri_chain/features/blockchain/widgets/status_badge.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/config/app_config.dart';
@@ -32,6 +34,16 @@ class _WalletScreenState extends State<WalletScreen> {
       _isConnecting = true;
       _connectionError = null;
     });
+
+    if (kIsWeb || !BlockchainConfig.enableWeb3Integration) {
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+          _connectionError = null;
+        });
+      }
+      return;
+    }
 
     try {
       final success = await _web3Service.initialize();

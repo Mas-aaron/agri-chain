@@ -40,6 +40,46 @@ class BlockchainProvider extends ChangeNotifier {
     await refresh();
   }
 
+  Future<Map<String, dynamic>?> mintYieldAssetFromPrediction({
+    required String cropType,
+    String? insuranceTier,
+    required String region,
+    required String soilType,
+    required double rainfallMm,
+    required double temperatureCelsius,
+    required bool fertilizerUsed,
+    required bool irrigationUsed,
+    required String weatherCondition,
+    required int daysToHarvest,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final res = await _apiService.mintYieldAssetFromPrediction(
+        cropType: cropType,
+        insuranceTier: insuranceTier,
+        region: region,
+        soilType: soilType,
+        rainfallMm: rainfallMm,
+        temperatureCelsius: temperatureCelsius,
+        fertilizerUsed: fertilizerUsed,
+        irrigationUsed: irrigationUsed,
+        weatherCondition: weatherCondition,
+        daysToHarvest: daysToHarvest,
+      );
+      await refresh();
+      return res;
+    } catch (e) {
+      _error = _parseError(e);
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   /// Refresh yield assets from API
   Future<void> refresh() async {
     if (_selectedFarmerId == null) return;

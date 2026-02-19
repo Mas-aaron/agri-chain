@@ -14,6 +14,21 @@ func NewBCSServiceAdapter(svc *bcs.BCSService) *BCSServiceAdapter {
 	return &BCSServiceAdapter{svc: svc}
 }
 
+func (a *BCSServiceAdapter) CreateYieldAsset(ctx context.Context, req CreateYieldAssetRequest) (CreateYieldAssetResult, *Error) {
+	args := bcs.CreateYieldAssetArgs{
+		FarmerID:       req.FarmerID,
+		CropType:       req.CropType,
+		PredictedYield: req.PredictedYield,
+		InsuranceTier:  req.InsuranceTier,
+	}
+	txID, err := a.svc.CreateYieldAsset(ctx, args)
+	if err != nil {
+		return CreateYieldAssetResult{}, &Error{Code: "BCS_ERROR", Message: err.Error(), Details: nil}
+	}
+	// The chaincode is expected to mint an asset/token and returns a tx id.
+	return CreateYieldAssetResult{AssetID: "BCS_ASSET_" + txID, TxID: txID}, nil
+}
+
 func (a *BCSServiceAdapter) Transfer(ctx context.Context, req TransferRequest) (TransferResult, *Error) {
 	// Phase enforcement is assumed to be done in chaincode; we only map to BCS call
 	args := bcs.TransferTokensArgs{

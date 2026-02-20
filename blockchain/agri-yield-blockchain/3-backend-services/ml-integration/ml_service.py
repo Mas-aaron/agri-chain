@@ -1,6 +1,7 @@
 import json
 import asyncio
 import hashlib
+import os
 from datetime import datetime
 from typing import Dict, List, Optional
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -15,7 +16,8 @@ class Config:
     BCS_REST_API = "https://your-bcs-rest-api"
     IPFS_ENDPOINT = "/ip4/127.0.0.1/tcp/5001"
     ETHEREUM_RPC = "https://mainnet.infura.io/v3/YOUR-PROJECT-ID"
-    ML_MODEL_ENDPOINT = "http://ml-service:5000/predict"
+    ML_MODEL_ENDPOINT = os.getenv("ML_MODEL_ENDPOINT", "http://yield-engine:8000/predict")
+    MODEL_VERSION = os.getenv("MODEL_VERSION", "agrichain-maize-v1")
 
 config = Config()
 
@@ -34,10 +36,31 @@ class MLPrediction(BaseModel):
     crop_type: str
     season: int
     predicted_yield_kg: float = Field(..., gt=0)
-    confidence: float = Field(..., ge=0, le=1)
+    confidence: Optional[float] = Field(None, ge=0, le=1)
     prediction_date: datetime
     model_version: str
     features: Dict[str, float]
+
+
+class AgronomyInputs(BaseModel):
+    nitrogen: float
+    phosphorus: float
+    potassium: float
+    temperature: float
+    humidity: float
+    ph: float
+    rainfall: float
+    pesticide: float
+
+
+class PredictAndTokenizeRequest(BaseModel):
+    farm_id: str
+    farmer_id: str
+    crop_type: str = "Maize"
+    season: int
+    inputs: AgronomyInputs
+    farmer_did: Optional[str] = None
+    metadata: Optional[Dict] = None
 
 class TokenizationRequest(BaseModel):
     prediction: MLPrediction
@@ -57,6 +80,27 @@ class TokenizedAsset(BaseModel):
 
 # Main Service
 class AgriYieldMLService:
+    async def fetch_yield_prediction(self, *, inputs: AgronomyInputs) -> float:
+        payload = inputs.dict()
+        timeout = aiohttp.ClientTimeout(total=20)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(config.ML_MODEL_ENDPOINT, json=payload) as resp:
+                text = await resp.text()
+                if resp.status >= 400:
+                    raise HTTPException(status_code=502, detail=f"Yield engine error ({resp.status}): {text}")
+                try:
+                    data = json.loads(text)
+                except Exception:
+                    raise HTTPException(status_code=502, detail=f"Invalid yield engine response: {text}")
+
+        predicted = data.get("predicted_yield")
+        if predicted is None:
+            raise HTTPException(status_code=502, detail=f"Yield engine response missing predicted_yield: {data}")
+        try:
+            return float(predicted)
+        except Exception:
+            raise HTTPException(status_code=502, detail=f"Invalid predicted_yield value: {predicted}")
+
     async def tokenize_yield_prediction(self, 
                                        request: TokenizationRequest) -> TokenizedAsset:
         """
@@ -119,6 +163,40 @@ async def tokenize_yield(request: TokenizationRequest):
     try:
         asset = await service.tokenize_yield_prediction(request)
         return asset
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/v1/predict-and-tokenize", response_model=TokenizedAsset)
+async def predict_and_tokenize(request: PredictAndTokenizeRequest):
+    try:
+        predicted_yield = await service.fetch_yield_prediction(inputs=request.inputs)
+        if predicted_yield <= 0:
+            raise HTTPException(status_code=400, detail=f"Predicted yield must be > 0, got {predicted_yield}")
+
+        prediction = MLPrediction(
+            farm_id=request.farm_id,
+            farmer_id=request.farmer_id,
+            crop_type=request.crop_type,
+            season=request.season,
+            predicted_yield_kg=predicted_yield,
+            confidence=None,
+            prediction_date=datetime.utcnow(),
+            model_version=config.MODEL_VERSION,
+            features=request.inputs.dict(),
+        )
+
+        token_req = TokenizationRequest(
+            prediction=prediction,
+            rover_data=None,
+            farmer_did=request.farmer_did,
+            metadata=request.metadata,
+        )
+
+        asset = await service.tokenize_yield_prediction(token_req)
+        return asset
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -4,7 +4,7 @@ const String _kFlutterEnv = String.fromEnvironment('FLUTTER_ENV', defaultValue: 
 
 const String _kApiBaseUrlOverride = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://119.8.117.2:8000',
+  defaultValue: 'http://101.44.10.153:8000',
 );
 
 const String _kBlockchainRpcOverride = String.fromEnvironment(
@@ -20,7 +20,7 @@ const String _kDatabasePath = String.fromEnvironment('DATABASE_PATH', defaultVal
 /// Application configuration with environment-based settings
 class AppConfig {
   // API Configuration
-  static const String _defaultApiBaseUrl = 'http://119.8.117.2:8000';
+  static const String _defaultApiBaseUrl = 'http://101.44.10.153:8000';
   static const String _prodApiBaseUrl = 'https://api.agrichain.com';
   
   static String get apiBaseUrl {

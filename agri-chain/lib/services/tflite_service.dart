@@ -6,9 +6,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show MethodChannel, rootBundle;
 import 'firebase_model_downloader.dart';
 
+enum CropModel { maize, coffee }
+
 class TFLiteService {
-  static const String _modelFileName = 'maize_disease.tflite';
-  static const String _labelsFileName = 'labels.txt';
+  static const String _maizeModelFileName = 'maize_disease.tflite';
+  static const String _maizeLabelsFileName = 'labels.txt';
+  static const String _coffeeModelFileName = 'coffee_disease.tflite';
+  static const String _coffeeLabelsFileName = 'coffee_labels.txt';
+
+  static const String _maizeModelAssetPath = 'assets/maize_disease.tflite';
+  static const String _maizeLabelsAssetPath = 'assets/labels.txt';
+  static const String _coffeeModelAssetPath = 'assets/coffee/coffee_disease.tflite';
+  static const String _coffeeLabelsAssetPath = 'assets/coffee/labels.txt';
 
   static const MethodChannel _channel = MethodChannel('agri_chain/tflite');
   List<String> _labels = const [];
@@ -17,26 +26,65 @@ class TFLiteService {
   List<int> _outputShape = const [];
   String _outputType = '';
 
+  CropModel _model = CropModel.maize;
+
   int get _inputHeight => _inputShape.length >= 4 ? _inputShape[1] : 224;
   int get _inputWidth => _inputShape.length >= 4 ? _inputShape[2] : 224;
+
+  CropModel get model => _model;
 
   // Singleton
   static final TFLiteService _instance = TFLiteService._internal();
   factory TFLiteService() => _instance;
   TFLiteService._internal();
 
+  Future<void> setModel(CropModel model) async {
+    if (_model == model && _isInitialized) return;
+    _model = model;
+    _isInitialized = false;
+    await initialize();
+  }
+
+  String _localModelFileName() {
+    return switch (_model) {
+      CropModel.maize => _maizeModelFileName,
+      CropModel.coffee => _coffeeModelFileName,
+    };
+  }
+
+  String _localLabelsFileName() {
+    return switch (_model) {
+      CropModel.maize => _maizeLabelsFileName,
+      CropModel.coffee => _coffeeLabelsFileName,
+    };
+  }
+
+  String _assetModelPath() {
+    return switch (_model) {
+      CropModel.maize => _maizeModelAssetPath,
+      CropModel.coffee => _coffeeModelAssetPath,
+    };
+  }
+
+  String _assetLabelsPath() {
+    return switch (_model) {
+      CropModel.maize => _maizeLabelsAssetPath,
+      CropModel.coffee => _coffeeLabelsAssetPath,
+    };
+  }
+
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     // Ensure model and labels exist locally
     final appDir = await getApplicationDocumentsDirectory();
-    final modelPath = File('${appDir.path}/$_modelFileName');
-    final labelsPath = File('${appDir.path}/$_labelsFileName');
+    final modelPath = File('${appDir.path}/${_localModelFileName()}');
+    final labelsPath = File('${appDir.path}/${_localLabelsFileName()}');
 
     bool shouldRefreshFromAssets = false;
     try {
-      final assetModelData = await rootBundle.load('assets/maize_disease.tflite');
-      final assetLabelsText = await rootBundle.loadString('assets/labels.txt');
+      final assetModelData = await rootBundle.load(_assetModelPath());
+      final assetLabelsText = await rootBundle.loadString(_assetLabelsPath());
       final assetLabels = assetLabelsText
           .split('\n')
           .map((e) => e.trim())
@@ -78,9 +126,13 @@ class TFLiteService {
     }
 
     if (!await modelPath.exists() || !await labelsPath.exists()) {
-      final downloaded = await FirebaseModelDownloader.downloadModelFiles();
-      await downloaded['model']!.copy(modelPath.path);
-      await downloaded['labels']!.copy(labelsPath.path);
+      if (_model == CropModel.maize) {
+        final downloaded = await FirebaseModelDownloader.downloadModelFiles();
+        await downloaded['model']!.copy(modelPath.path);
+        await downloaded['labels']!.copy(labelsPath.path);
+      } else {
+        throw Exception('Coffee model assets are missing. Ensure assets are bundled and run flutter pub get.');
+      }
     }
 
     // Load labels
@@ -90,54 +142,54 @@ class TFLiteService {
     // Load model with proper configuration
     final info = await _channel.invokeMethod<Map<dynamic, dynamic>>('loadModel', {
       'modelPath': modelPath.path,
-      'threads': 2,  // Optimal for most devices
-      'useGPU': false,  // Disable GPU first for debugging
+      'threads': 2, // Optimal for most devices
+      'useGPU': false, // Disable GPU first for debugging
     });
-    
+
     if (info == null) {
       throw Exception('Failed to load model (no response from platform).');
     }
-    
+
     _inputShape = (info['inputShape'] as List).cast<int>();
     _outputShape = (info['outputShape'] as List).cast<int>();
     _outputType = (info['outputType'] as String?) ?? '';
-    
-    print('🎯 Model Loaded Successfully');
+
+    print('🎯 Model Loaded Successfully ($_model)');
     print('   Input Shape: $_inputShape');
     print('   Output Shape: $_outputShape');
     print('   Output Type: $_outputType');
     print('   Number of Labels: ${_labels.length}');
-    
+
     _isInitialized = true;
   }
 
   Future<void> verifyModelInputs() async {
-  if (!_isInitialized) await initialize();
-  
-  print('=== MODEL VERIFICATION ===');
-  print('Expected input size: $_inputWidth x $_inputHeight x 3');
-  print('Model input shape: $_inputShape');
-  print('Model output shape: $_outputShape');
-  print('Model output type: $_outputType');
-  
-  // Calculate expected bytes
-  final expectedBytes = _inputWidth * _inputHeight * 3 * 4; // float32 = 4 bytes
-  print('Expected input bytes: $expectedBytes');
-  
-  // Test with a sample image
-  final testImage = img.Image(width: _inputWidth, height: _inputHeight);
-  img.fill(testImage, color: img.ColorRgb8(128, 128, 128));
-  
-  final input = Float32List(_inputWidth * _inputHeight * 3);
-  for (int i = 0; i < input.length; i += 3) {
-    input[i] = 0.5;   // R = 128/255
-    input[i+1] = 0.5; // G
-    input[i+2] = 0.5; // B
+    if (!_isInitialized) await initialize();
+
+    print('=== MODEL VERIFICATION ===');
+    print('Expected input size: $_inputWidth x $_inputHeight x 3');
+    print('Model input shape: $_inputShape');
+    print('Model output shape: $_outputShape');
+    print('Model output type: $_outputType');
+
+    // Calculate expected bytes
+    final expectedBytes = _inputWidth * _inputHeight * 3 * 4; // float32 = 4 bytes
+    print('Expected input bytes: $expectedBytes');
+
+    // Test with a sample image
+    final testImage = img.Image(width: _inputWidth, height: _inputHeight);
+    img.fill(testImage, color: img.ColorRgb8(128, 128, 128));
+
+    final input = Float32List(_inputWidth * _inputHeight * 3);
+    for (int i = 0; i < input.length; i += 3) {
+      input[i] = 0.5; // R = 128/255
+      input[i + 1] = 0.5; // G
+      input[i + 2] = 0.5; // B
+    }
+
+    print('Test input bytes: ${input.buffer.asUint8List().length}');
+    print('Test input first values: ${input.take(6).toList()}');
   }
-  
-  print('Test input bytes: ${input.buffer.asUint8List().length}');
-  print('Test input first values: ${input.take(6).toList()}');
-}
 
   Future<Map<String, dynamic>> predictImage(File imageFile, {int topK = 3}) async {
     if (!_isInitialized) await initialize();

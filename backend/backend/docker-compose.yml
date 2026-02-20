@@ -1,27 +1,32 @@
 services:
-  api:
+  agrichain-api:
     build: .
+    image: agrichain-backend:latest
+    container_name: agrichain-api
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # Default: run in mock mode. Change to "gateway" once BCS is configured.
+      FABRIC_MODE: mock
+      # --- Uncomment below when switching to real Fabric (BCS) mode ---
+      # FABRIC_MODE: gateway
+      # FABRIC_PEER_ENDPOINT: <peer-host>:<port>
+      # FABRIC_TLS_CERT_PATH: /certs/tls-ca.pem
+      # FABRIC_MSP_ID: Org1MSP
+      # FABRIC_CERT_PATH: /certs/admin.crt
+      # FABRIC_KEY_PATH: /certs/admin.key
+      # FABRIC_CHANNEL: yield-channel
+      # FABRIC_CHAINCODE: agri_yield
     volumes:
       - ./data:/app/data
+      # Mount BCS certs here when using gateway mode:
+      # - /path/to/bcs-certs:/certs:ro
     restart: unless-stopped
-
-# Optional database (not used by current code yet).
-# When you migrate to SQLAlchemy + Postgres/MySQL, enable this and add DB env vars.
-#  db:
-#    image: postgres:16-alpine
-#    environment:
-#      POSTGRES_DB: agrichain
-#      POSTGRES_USER: agrichain
-#      POSTGRES_PASSWORD: change_me
-#    volumes:
-#      - pgdata:/var/lib/postgresql/data
-#    ports:
-#      - "5432:5432"
-#    restart: unless-stopped
-
-#volumes:
-#  pgdata:
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

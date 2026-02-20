@@ -1,4 +1,15 @@
 services:
+  # Yield Prediction Engine (FastAPI - internal)
+  yield-engine:
+    build:
+      context: ../../../backend/backend
+    environment:
+      - CORS_ORIGINS=*
+      - AGRICHAIN_DB_PATH=/app/data/agrichain.db
+    volumes:
+      - yield_data:/app/data
+    restart: unless-stopped
+
   # PostgreSQL Database
   postgres:
     image: postgres:14-alpine
@@ -50,7 +61,11 @@ services:
       BCS_ACCESS_KEY: ${BCS_ACCESS_KEY}
       BCS_SECRET_KEY: ${BCS_SECRET_KEY}
       ETHEREUM_RPC: ${ETHEREUM_RPC:-http://localhost:8545}
+      ML_MODEL_ENDPOINT: http://yield-engine:8000/predict
+      MODEL_VERSION: ${MODEL_VERSION:-agrichain-maize-v1}
     depends_on:
+      yield-engine:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -92,6 +107,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
 volumes:
+  yield_data:
   postgres_data:
   redis_data:
   ipfs_data:

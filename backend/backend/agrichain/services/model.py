@@ -6,10 +6,18 @@ from typing import Optional
 
 import joblib
 
-from agrichain.core.config import MODEL_PATH, PREPROCESSING_PATH, BASE_DIR
+from agrichain.core.config import BASE_DIR, FEATURES_PATH, MODEL_PATH, PREPROCESSING_PATH
 
 _model = None
 _preprocessing_info = None
+
+
+def _load_pickle_or_joblib(path: Path) -> object:
+    try:
+        return joblib.load(str(path))
+    except Exception:
+        with open(path, "rb") as f:
+            return pickle.load(f)
 
 
 def get_model_name(preprocessing_info: dict) -> Optional[str]:
@@ -40,6 +48,17 @@ def _resolve_paths() -> tuple[Path, Path]:
     return model_path, preprocessing_path
 
 
+def _resolve_features_path() -> Optional[Path]:
+    features_path = FEATURES_PATH
+    if features_path.exists():
+        return features_path
+
+    detected = _pick_first("feature_names*.pkl")
+    if detected is None:
+        detected = _pick_first("*feature*names*.pkl")
+    return detected
+
+
 def load_artifacts() -> tuple[object, dict]:
     global _model, _preprocessing_info
 
@@ -47,6 +66,7 @@ def load_artifacts() -> tuple[object, dict]:
         return _model, _preprocessing_info
 
     model_path, preprocessing_path = _resolve_paths()
+    features_path = _resolve_features_path()
 
     if not model_path.exists():
         raise FileNotFoundError(
@@ -58,15 +78,26 @@ def load_artifacts() -> tuple[object, dict]:
             f"Preprocessing info file not found at '{PREPROCESSING_PATH}'. Set MAIZE_PREPROCESSING_PATH or place a .pkl file in backend/."
         )
 
-    _model = joblib.load(str(model_path))
+    if features_path is None or not features_path.exists():
+        raise FileNotFoundError(
+            f"Feature names file not found at '{FEATURES_PATH}'. Set MAIZE_FEATURES_PATH or place a feature_names*.pkl file in backend/."
+        )
 
-    with open(preprocessing_path, "rb") as f:
-        _preprocessing_info = pickle.load(f)
+    _model = _load_pickle_or_joblib(model_path)
 
-    if not isinstance(_preprocessing_info, dict):
-        raise ValueError("Invalid preprocessing info: expected a dict.")
+    scaler = _load_pickle_or_joblib(preprocessing_path)
+    feature_names = _load_pickle_or_joblib(features_path)
 
-    if "feature_names" not in _preprocessing_info:
-        raise ValueError("Invalid preprocessing info: missing 'feature_names'.")
+    if isinstance(feature_names, dict) and "feature_names" in feature_names:
+        feature_names = feature_names["feature_names"]
+
+    if not isinstance(feature_names, (list, tuple)):
+        raise ValueError("Invalid feature names: expected a list/tuple.")
+
+    _preprocessing_info = {
+        "feature_names": list(feature_names),
+        "scaler": scaler,
+        "best_model_name": type(_model).__name__,
+    }
 
     return _model, _preprocessing_info

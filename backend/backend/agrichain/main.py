@@ -1,16 +1,32 @@
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agrichain.core.config import ALLOWED_ORIGINS
 from agrichain.db.sqlite import init_db
+from agrichain.routers.blockchain import router as blockchain_router
 from agrichain.routers.contracts import router as contracts_router
 from agrichain.routers.predict import router as predict_router
+from agrichain.routers.payments import router as payments_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Maize Yield Prediction API")
+    app = FastAPI(
+        title="AgriChain Maize Yield API",
+        description="Maize yield prediction and blockchain asset management API.",
+        version="1.0.0",
+        lifespan=lifespan,
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -22,10 +38,17 @@ def create_app() -> FastAPI:
 
     app.include_router(predict_router)
     app.include_router(contracts_router)
+    app.include_router(blockchain_router)
+    app.include_router(payments_router)
 
-    @app.on_event("startup")
-    def _on_startup() -> None:
-        init_db()
+    @app.get("/health", tags=["system"])
+    async def health():
+        fabric_mode = os.getenv("FABRIC_MODE", "mock").strip().lower()
+        return {
+            "status": "ok",
+            "fabric_mode": fabric_mode,
+            "version": "1.0.0",
+        }
 
     return app
 

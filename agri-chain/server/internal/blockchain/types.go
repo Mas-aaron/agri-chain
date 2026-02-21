@@ -57,7 +57,20 @@ type ListTransfersResult struct {
 	Offset    int              `json:"offset"`
 }
 
+type CreateYieldAssetRequest struct {
+	FarmerID       string  `json:"farmerId"`
+	CropType       string  `json:"cropType"`
+	PredictedYield float64 `json:"predictedYield"`
+	InsuranceTier  string  `json:"insuranceTier"`
+}
+
+type CreateYieldAssetResult struct {
+	AssetID string `json:"assetId"`
+	TxID    string `json:"txId"`
+}
+
 type Service interface {
+	CreateYieldAsset(ctx context.Context, req CreateYieldAssetRequest) (CreateYieldAssetResult, *Error)
 	Transfer(ctx context.Context, req TransferRequest) (TransferResult, *Error)
 	GetTokenPhase(tokenID string) (TokenPhase, bool)
 	ListTransfers(ctx context.Context, req ListTransfersRequest) (ListTransfersResult, *Error)

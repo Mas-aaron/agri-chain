@@ -57,6 +57,29 @@ func (s *MockService) GetTokenPhase(tokenID string) (TokenPhase, bool) {
 	return p, true
 }
 
+func (s *MockService) CreateYieldAsset(ctx context.Context, req CreateYieldAssetRequest) (CreateYieldAssetResult, *Error) {
+	if strings.TrimSpace(req.FarmerID) == "" {
+		return CreateYieldAssetResult{}, &Error{Code: "VALIDATION_ERROR", Message: "farmerId is required", Details: nil}
+	}
+	if strings.TrimSpace(req.CropType) == "" {
+		return CreateYieldAssetResult{}, &Error{Code: "VALIDATION_ERROR", Message: "cropType is required", Details: nil}
+	}
+	if req.PredictedYield <= 0 {
+		return CreateYieldAssetResult{}, &Error{Code: "VALIDATION_ERROR", Message: "predictedYield must be > 0", Details: map[string]any{"predictedYield": req.PredictedYield}}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	assetID := "YA_" + shortHash(req.FarmerID+":"+req.CropType+":"+now)
+	// Use assetID as the token id for mock phase tracking.
+	s.phases[assetID] = PhasePredicted
+
+	txid := "TX_" + strings.ToUpper(shortHash(assetID+":"+now))
+	return CreateYieldAssetResult{AssetID: assetID, TxID: txid}, nil
+}
+
 func (s *MockService) Transfer(ctx context.Context, req TransferRequest) (TransferResult, *Error) {
 	amount, err := strconv.ParseFloat(req.Amount, 64)
 	if err != nil || amount <= 0 {

@@ -72,4 +72,6 @@ flutter:
   assets:
     - assets/maize_disease.tflite
     - assets/labels.txt
+    - assets/coffee/coffee_disease.tflite
+    - assets/coffee/labels.txt
     - assets/images/

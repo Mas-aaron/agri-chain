@@ -10,7 +10,7 @@ const String _kChainId = String.fromEnvironment('CHAIN_ID', defaultValue: '1');
 /// Blockchain configuration constants
 class BlockchainConfig {
   // API Configuration - Use environment-based URL
-  static String get apiBaseUrl => '${AppConfig.apiBaseUrl}/blockchain';
+  static String get apiBaseUrl => AppConfig.apiBaseUrl;
   static Duration get apiTimeout => AppConfig.apiTimeout;
 
   // Blockchain Configuration - Use environment-based RPC

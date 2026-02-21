@@ -24,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late TFLiteService _tfliteService;
   bool _isLoading = false;
+  CropModel _cropModel = CropModel.maize;
 
   String _formatConfidence(dynamic confidence) {
     final asDouble = confidence is num ? confidence.toDouble() : double.tryParse('$confidence');
@@ -74,6 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoading = true);
     
     try {
+      await _tfliteService.setModel(_cropModel);
       final result = await _tfliteService.predictImage(imageFile);
       
       if (result['success'] == true) {
@@ -90,7 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 : (double.tryParse('$confidence') ?? 0.0);
 
             final normalizedKey = label.replaceAll('_', ' ').trim().toLowerCase();
-            final isNonMaize = RecommendationService.isNonMaizeLabel(normalizedKey);
+            final isNonMaize = _cropModel == CropModel.maize
+                ? RecommendationService.isNonMaizeLabel(normalizedKey)
+                : false;
 
             final severity = (lower.contains('healthy') || isNonMaize)
                 ? 'Low'
@@ -140,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
               predictions: result['predictions'],
               inferenceTime: result['inferenceTime'],
               selectedFieldId: selectedFieldId,
+              cropModel: _cropModel,
             ),
           ),
         );
@@ -230,6 +235,45 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
 
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.eco_outlined),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<CropModel>(
+                        value: _cropModel,
+                        decoration: const InputDecoration(
+                          labelText: 'Crop model',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: CropModel.maize,
+                            child: Text('Maize'),
+                          ),
+                          DropdownMenuItem(
+                            value: CropModel.coffee,
+                            child: Text('Coffee'),
+                          ),
+                        ],
+                        onChanged: _isLoading
+                            ? null
+                            : (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _cropModel = value;
+                                });
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Scan Button
             Center(
               child: ScanButton(
@@ -267,22 +311,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDiseaseInfo() {
     final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          title: 'Common maize diseases',
-          subtitle: 'Know what to look for before symptoms spread.',
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.15,
-          children: [
+
+    final isCoffee = _cropModel == CropModel.coffee;
+    final headerTitle = isCoffee ? 'Common coffee diseases' : 'Common maize diseases';
+    final headerSubtitle = isCoffee
+        ? 'Know what to look for on coffee leaves before symptoms spread.'
+        : 'Know what to look for before symptoms spread.';
+
+    final cards = isCoffee
+        ? <Widget>[
+            DiseaseCard(
+              diseaseName: 'Coffee Leaf Rust',
+              severity: 'High',
+              color: Colors.orange,
+              icon: Icons.local_fire_department_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
+            ),
+            DiseaseCard(
+              diseaseName: 'Coffee Berry Disease',
+              severity: 'High',
+              color: Colors.red,
+              icon: Icons.bug_report_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
+            ),
+            DiseaseCard(
+              diseaseName: 'Cercospora Leaf Spot',
+              severity: 'Medium',
+              color: Colors.blue,
+              icon: Icons.grain_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
+            ),
+            DiseaseCard(
+              diseaseName: 'Healthy',
+              severity: 'None',
+              color: scheme.primary,
+              icon: Icons.check_circle_outline,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Great! Keep scouting weekly and scan if you see new spots.')),
+              ),
+            ),
+          ]
+        : <Widget>[
             DiseaseCard(
               diseaseName: 'Northern Leaf Blight',
               severity: 'High',
@@ -319,7 +394,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SnackBar(content: Text('Great! Keep scouting weekly and scan if you see new spots.')),
               ),
             ),
-          ],
+          ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: headerTitle,
+          subtitle: headerSubtitle,
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.15,
+          children: cards,
         ),
       ],
     );

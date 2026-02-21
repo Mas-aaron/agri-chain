@@ -97,6 +97,11 @@ type TokenTrade struct {
 	CompletedAt     time.Time `json:"completedAt"`
 }
 
+// Init is called by BCS during chaincode instantiation (delegates to InitLedger)
+func (s *AgriYieldChaincode) Init(ctx contractapi.TransactionContextInterface) error {
+	return s.InitLedger(ctx)
+}
+
 // InitLedger initializes the ledger with sample data
 func (s *AgriYieldChaincode) InitLedger(ctx contractapi.TransactionContextInterface) error {
 	fmt.Println("Initializing AgriYield Ledger")

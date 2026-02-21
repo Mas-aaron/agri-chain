@@ -75,6 +75,7 @@ func NewServer(addr string) *Server {
 	{
 		farmer := v1.Group("", middleware.RequireAnyRole("farmer", "admin"), middleware.RequireKYCApproved(db))
 		ch.RegisterV1FarmerActions(farmer)
+		handlers.NewYieldAssetsHandler(db, blockchainSvc, cfg.YieldAPIBaseURL).RegisterV1(farmer)
 	}
 	{
 		buyer := v1.Group("", middleware.RequireAnyRole("bank", "investor", "admin"), middleware.RequireKYCApproved(db))

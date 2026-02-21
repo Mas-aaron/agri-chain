@@ -9,6 +9,7 @@ type Config struct {
 	SQLitePath              string
 	FirebaseCredentialsPath string
 	MLBaseURL               string
+	YieldAPIBaseURL         string
 }
 
 func Load() Config {
@@ -25,5 +26,9 @@ func Load() Config {
 	if mlBaseURL == "" {
 		mlBaseURL = "http://127.0.0.1:8001"
 	}
-	return Config{Port: port, SQLitePath: sqlitePath, FirebaseCredentialsPath: credsPath, MLBaseURL: mlBaseURL}
+	yieldAPIBaseURL := os.Getenv("YIELD_API_BASE_URL")
+	if yieldAPIBaseURL == "" {
+		yieldAPIBaseURL = mlBaseURL
+	}
+	return Config{Port: port, SQLitePath: sqlitePath, FirebaseCredentialsPath: credsPath, MLBaseURL: mlBaseURL, YieldAPIBaseURL: yieldAPIBaseURL}
 }

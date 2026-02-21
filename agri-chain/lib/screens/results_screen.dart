@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/widgets/confidence_bar.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
+import 'package:agri_chain/services/tflite_service.dart';
 
 class ResultsScreen extends StatelessWidget {
   final File imageFile;
   final List<Map<String, dynamic>> predictions;
   final int inferenceTime;
   final String? selectedFieldId;
+  final CropModel cropModel;
 
   const ResultsScreen({
     super.key,
@@ -18,6 +20,7 @@ class ResultsScreen extends StatelessWidget {
     required this.predictions,
     required this.inferenceTime,
     this.selectedFieldId,
+    required this.cropModel,
   });
 
   double _asDouble(dynamic value) {
@@ -44,7 +47,7 @@ class ResultsScreen extends StatelessWidget {
     final topPrediction = predictions.first;
     final rec = RecommendationService.recommendForLabel((topPrediction['label'] as String?) ?? '');
     final isHealthy = rec.isHealthy;
-    final isNonMaize = rec.isNonMaize;
+    final isNonMaize = cropModel == CropModel.maize ? rec.isNonMaize : false;
 
     return Scaffold(
       appBar: AppBar(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:agri_chain/services/contracts_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/config/app_config.dart';
+import 'package:agri_chain/screens/blockchain/payment_flow.dart';
 
 class YieldContract {
   final String id;
@@ -27,7 +28,9 @@ class YieldContract {
 }
 
 class ContractsScreen extends StatefulWidget {
-  const ContractsScreen({super.key});
+  final VoidCallback? onNavigateToLedger;
+
+  const ContractsScreen({super.key, this.onNavigateToLedger});
 
   @override
   State<ContractsScreen> createState() => _ContractsScreenState();
@@ -249,22 +252,20 @@ class _ContractsScreenState extends State<ContractsScreen> {
                           runSpacing: 8,
                           children: [
                             if (c.status.toUpperCase() == 'LISTED')
-                              OutlinedButton.icon(
+                              FilledButton.icon(
                                 onPressed: () async {
-                                  try {
-                                    await _api.purchaseContract(
-                                      c.id,
-                                      const ContractPurchaseRequest(buyerName: 'Demo Buyer'),
-                                    );
-                                    if (!context.mounted) return;
-                                    _reload();
-                                  } catch (e) {
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Purchase failed: $e')));
-                                  }
+                                  final paid = await showPaymentFlow(
+                                    context,
+                                    contract: c,
+                                    onNavigateToLedger: widget.onNavigateToLedger,
+                                  );
+                                  if (paid && context.mounted) _reload();
                                 },
-                                icon: const Icon(Icons.shopping_cart_outlined),
-                                label: const Text('Purchase'),
+                                icon: const Icon(Icons.payment, size: 18),
+                                label: const Text('Purchase & Pay'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.green.shade700,
+                                ),
                               ),
                             if (c.status.toUpperCase() == 'PURCHASED')
                               OutlinedButton.icon(
@@ -276,6 +277,19 @@ class _ContractsScreenState extends State<ContractsScreen> {
                                     );
                                     if (!context.mounted) return;
                                     _reload();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: const Text('Contract delivered! View it in the Ledger.'),
+                                        backgroundColor: Colors.green.shade700,
+                                        action: widget.onNavigateToLedger != null
+                                            ? SnackBarAction(
+                                                label: 'View Ledger',
+                                                textColor: Colors.white,
+                                                onPressed: widget.onNavigateToLedger!,
+                                              )
+                                            : null,
+                                      ),
+                                    );
                                   } catch (e) {
                                     if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deliver failed: $e')));

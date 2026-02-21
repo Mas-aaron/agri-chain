@@ -5,6 +5,17 @@ allprojects {
     }
 }
 
+// Fix Material Design 3 attribute compatibility for flutter_bluetooth_serial
+subprojects {
+    configurations.all {
+        resolutionStrategy {
+            force("com.google.android.material:material:1.11.0")
+            force("androidx.work:work-runtime:2.8.1")
+            force("androidx.fragment:fragment:1.6.1")
+        }
+    }
+}
+
 // Some older Flutter plugins (e.g. flutter_bluetooth_serial) still rely on the
 // AndroidManifest.xml package attribute and do not set the AGP 8+ `namespace`
 // field. Inject it here to keep builds working without patching pub cache.

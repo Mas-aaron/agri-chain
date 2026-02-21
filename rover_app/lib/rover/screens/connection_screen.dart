@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/rover_model.dart';
 import '../providers/rover_provider.dart';
 import '../widgets/connection_card.dart';
+import 'gps_screen.dart';
 
 class RoverConnectionScreen extends StatefulWidget {
   const RoverConnectionScreen({super.key});
@@ -477,11 +478,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<RoverProvider>(context, listen: false);
       setState(() => _currentSpeed = provider.status.speed);
+      // Start GPS data polling
+      provider.startGPSPolling();
     });
   }
 
   @override
   void dispose() {
+    final provider = Provider.of<RoverProvider>(context, listen: false);
+    provider.stopGPSPolling();
     _pressTimer?.cancel();
     _animationController.dispose();
     super.dispose();
@@ -540,6 +545,10 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                           _buildRotationControls(provider),
                           const SizedBox(height: 30),
                           _buildSpeedControl(provider),
+                          const SizedBox(height: 30),
+                          _buildGPSDisplay(provider),
+                          const SizedBox(height: 30),
+                          _buildSoilSamplingControl(provider),
                           const SizedBox(height: 30),
                           _buildEmergencyStop(provider),
                           const SizedBox(height: 20),
@@ -940,6 +949,264 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGPSDisplay(RoverProvider provider) {
+    final gps = provider.gpsData;
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: gps.isValid ? Colors.orange.shade50 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: gps.isValid ? Colors.orange.shade300 : Colors.grey.shade300,
+          width: 2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'GPS Location',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const GPSDataScreen()),
+                    ),
+                    icon: const Icon(Icons.fullscreen, color: Colors.orange),
+                    tooltip: 'View Full GPS Data',
+                    iconSize: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: gps.isValid ? Colors.green : Colors.red,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          gps.isValid ? Icons.check_circle : Icons.error,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          gps.isValid ? 'Valid' : 'No Fix',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (gps.isValid) ...[
+            _buildGPSInfoRow('Latitude', '${gps.latitude.toStringAsFixed(6)}°'),
+            _buildGPSInfoRow('Longitude', '${gps.longitude.toStringAsFixed(6)}°'),
+            _buildGPSInfoRow('Altitude', '${gps.altitude.toStringAsFixed(2)} m'),
+            _buildGPSInfoRow('Speed', gps.speedKmh),
+            _buildGPSInfoRow('Course', '${gps.course.toStringAsFixed(1)}° ${gps.courseString}'),
+            _buildGPSInfoRow('Satellites', '${gps.satellites}'),
+            _buildGPSInfoRow('HDOP', '${gps.hdop.toStringAsFixed(2)}'),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_off,
+                    color: Colors.grey.shade600,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'GPS data not available. Searching for satellites...',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGPSInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.orange.shade700,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSoilSamplingControl(RoverProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.green.shade100, Colors.green.shade50],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.green.shade300, width: 2),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.agriculture, color: Colors.green.shade700, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Soil Sampling',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      'Collect soil samples',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: !provider.isConnected
+                  ? null
+                  : () {
+                      _showSoilSamplingDialog(provider);
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                disabledBackgroundColor: Colors.grey,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Sample Soil',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSoilSamplingDialog(RoverProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('🌱 Soil Sampling'),
+        content: const Text(
+          'This will initiate the soil sampling sequence.\n\n'
+          'The rover will:\n'
+          '1. Extend the sampling arm\n'
+          '2. Deploy the sampling bucket\n'
+          '3. Retract the bucket (with sample)\n'
+          '4. Return arm to rest position\n\n'
+          'This takes approximately 12 seconds.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              
+              // Start soil sampling
+              final success = await provider.sampleSoil();
+              
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? '🌱 Soil sampling started'
+                          : '❌ Sampling failed',
+                    ),
+                    backgroundColor:
+                        success ? Colors.green : Colors.red,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text(
+              'Start Sampling',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),

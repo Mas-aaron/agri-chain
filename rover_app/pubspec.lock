@@ -53,18 +53,18 @@ packages:
     dependency: "direct main"
     description:
       name: connectivity_plus
-      sha256: "224a77051d52a11fbad53dd57827594d3bd24f945af28bd70bab376d68d437f0"
+      sha256: "33bae12a398f841c6cda09d1064212957265869104c478e5ad51e2fb26c3973c"
       url: "https://pub.dev"
     source: hosted
-    version: "5.0.2"
+    version: "7.0.0"
   connectivity_plus_platform_interface:
     dependency: transitive
     description:
       name: connectivity_plus_platform_interface
-      sha256: cf1d1c28f4416f8c654d7dc3cd638ec586076255d407cef3ddbdaf178272a71a
+      sha256: "42657c1715d48b167930d5f34d00222ac100475f73d10162ddf43e714932f204"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.4"
+    version: "2.0.1"
   crypto:
     dependency: transitive
     description:
@@ -130,10 +130,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_joystick
-      sha256: "9fee6b7f69501ecf78c02c924169f17311737cc84990205d6affb7d9ccda5388"
+      sha256: "119f5798305645527dbc0346ce98e9d3d16d4005b041c6b655dca093dc6a9272"
       url: "https://pub.dev"
     source: hosted
-    version: "0.0.4"
+    version: "0.2.2"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -168,14 +168,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
-  js:
-    dependency: transitive
-    description:
-      name: js
-      sha256: f2c445dce49627136094980615a031419f7f3eb393237e4ecd97ac15dea343f3
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.6.7"
   leak_tracker:
     dependency: transitive
     description:
@@ -292,18 +284,18 @@ packages:
     dependency: "direct main"
     description:
       name: permission_handler
-      sha256: "59adad729136f01ea9e35a48f5d1395e25cba6cea552249ddbe9cf950f5d7849"
+      sha256: bc917da36261b00137bbc8896bf1482169cd76f866282368948f032c8c1caae1
       url: "https://pub.dev"
     source: hosted
-    version: "11.4.0"
+    version: "12.0.1"
   permission_handler_android:
     dependency: transitive
     description:
       name: permission_handler_android
-      sha256: d3971dcdd76182a0c198c096b5db2f0884b0d4196723d21a866fc4cdea057ebc
+      sha256: "1e3bc410ca1bf84662104b100eb126e066cb55791b7451307f9708d4007350e6"
       url: "https://pub.dev"
     source: hosted
-    version: "12.1.0"
+    version: "13.0.1"
   permission_handler_apple:
     dependency: transitive
     description:
@@ -505,18 +497,26 @@ packages:
     dependency: transitive
     description:
       name: web
-      sha256: "97da13628db363c635202ad97068d47c5b8aa555808e7a9411963c533b449b27"
+      sha256: "868d88a33d8a87b18ffc05f9f030ba328ffefba92d6c127917a2ba740f9cfe4a"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.1"
+    version: "1.1.1"
+  web_socket:
+    dependency: transitive
+    description:
+      name: web_socket
+      sha256: "34d64019aa8e36bf9842ac014bb5d2f5586ca73df5e4d9bf5c936975cae6982c"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.1"
   web_socket_channel:
     dependency: "direct main"
     description:
       name: web_socket_channel
-      sha256: "58c6666b342a38816b2e7e50ed0f1e261959630becd4c879c4f26bfa14aa5a42"
+      sha256: d645757fb0f4773d602444000a8131ff5d48c9e47adfe9772652dd1a4f2d45c8
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.5"
+    version: "3.0.3"
   xdg_directories:
     dependency: transitive
     description:

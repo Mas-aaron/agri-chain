@@ -16,8 +16,9 @@ dependencies:
   loading_animation_widget: ^1.2.0
   connectivity_plus: ^5.0.2
   
-  # TensorFlow Lite - Use ONLY ONE of these
-  tflite_flutter: ^0.12.1  # Modern, recommended
+  # MindSpore Lite Custom JNI used instead
+  mindspore_lite_flutter:
+    path: ../mindspore_lite_flutter
   
   # Image/Camera
   image_picker: ^1.1.1  # Updated version
@@ -26,6 +27,13 @@ dependencies:
   
   # Image processing
   image: ^4.1.4
+  
+  # PesaPal WebView checkout
+  webview_flutter: ^4.2.4
+  
+  # Mapping (rover field polygons)
+  flutter_map: ^6.1.0
+  latlong2: ^0.9.0
   
   # UI/UX
   provider: ^6.1.3
@@ -70,8 +78,14 @@ flutter_icons:
 flutter:
   uses-material-design: true
   assets:
-    - assets/maize_disease.tflite
-    - assets/labels.txt
-    - assets/coffee/coffee_disease.tflite
-    - assets/coffee/labels.txt
+    # - assets/models/
+    # - assets/images/
+      # Include all assets recursively
+    - assets/coffee/
     - assets/images/
+    - assets/models/
+    # Or include specific files
+    - assets/models/coffee_labels.txt
+    - assets/models/coffee_model.ms
+    - assets/models/maize_labels.txt
+    - assets/models/maize_model.ms

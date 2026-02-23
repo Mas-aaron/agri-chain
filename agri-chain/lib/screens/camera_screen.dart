@@ -69,18 +69,16 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // Guarded use for taking a picture
   Future<void> _takePicture() async {
     try {
-      // Use guard clauses
       if (_initializeControllerFuture == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Camera not ready yet')),
         );
         return;
       }
-      await _initializeControllerFuture; // Ensure initialization finished
-      
+      await _initializeControllerFuture;
+
       final controller = _controller;
       if (controller == null || !controller.value.isInitialized) {
         throw StateError('Camera not initialized');
@@ -89,17 +87,30 @@ class _CameraScreenState extends State<CameraScreen> {
 
       final image = await controller.takePicture();
       if (!mounted) return;
-      // Assume you want to pop back and return the file path/object
-      Navigator.pop(context, File(image.path)); 
+
+      // ── Dispose the camera BEFORE popping the route ────────────────────────
+      // Navigator.pop() triggers the widget's dispose() async-concurrently with
+      // CameraX teardown, causing a tagged-pointer heap corruption (SIGABRT MTE)
+      // on ARM64 / Android 12.  Explicitly disposing here, before navigation,
+      // serialises the teardown and prevents the race.
+      _controller = null;          // prevent dispose() from double-disposing
+      await controller.dispose();  // full CameraX teardown before we navigate
+
+      if (!mounted) return;
+      Navigator.pop(context, File(image.path));
 
     } on CameraException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Capture failed: ${e.code} ${e.description ?? ''}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Capture failed: ${e.code} ${e.description ?? ''}')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Capture failed: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Capture failed: $e')),
+        );
+      }
     }
   }
 
@@ -115,10 +126,11 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
   
-  // Dispose safely using null-aware operator
   @override
   void dispose() {
+    // _controller may already be null if _takePicture() disposed it explicitly
     _controller?.dispose();
+    _controller = null;
     super.dispose();
   }
 

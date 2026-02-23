@@ -2,7 +2,7 @@
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:agri_chain/services/tflite_service.dart';
+import 'package:agri_chain/services/mindspore_service.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
@@ -22,7 +22,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late TFLiteService _tfliteService;
+  final MindSporeService _msService = MindSporeService();
   bool _isLoading = false;
   CropModel _cropModel = CropModel.maize;
 
@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _tfliteService = Provider.of<TFLiteService>(context, listen: false);
+    // Model initializes on first scan — pre-warming here caused startup jank
   }
 
   Future<void> _pickImageFromGallery() async {
@@ -73,11 +73,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _processImage(File imageFile) async {
     setState(() => _isLoading = true);
-    
+
     try {
-      await _tfliteService.setModel(_cropModel);
-      final result = await _tfliteService.predictImage(imageFile);
-      
+      // Initialize MindSpore Lite with the correct local .ms model asset
+      final modelType = _cropModel == CropModel.maize ? 'maize' : 'coffee';
+      await _msService.initialize(modelType: modelType);
+
+      // Run offline inference — no network, no downloads
+      final result = await _msService.predictImage(imageFile);
+
       if (result['success'] == true) {
         final selectedFieldId = context.read<ScanProvider>().selectedFieldId;
         try {
@@ -142,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context) => ResultsScreen(
               imageFile: imageFile,
               predictions: result['predictions'],
-              inferenceTime: result['inferenceTime'],
+              inferenceTime: result['inferenceTime'] ?? 0,
               selectedFieldId: selectedFieldId,
               cropModel: _cropModel,
             ),
@@ -219,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String?>(
-                            value: effectiveSelectedFieldId,
+                            initialValue: effectiveSelectedFieldId,
                             items: items,
                             decoration: const InputDecoration(
                               labelText: 'Selected field (optional)',
@@ -244,7 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<CropModel>(
-                        value: _cropModel,
+                        initialValue: _cropModel,
                         decoration: const InputDecoration(
                           labelText: 'Crop model',
                         ),
@@ -429,14 +433,14 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Powered by TensorFlow Lite',
+                  'Powered by MindSpore Lite',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
                   ),
                 ),
                 Text(
-                  'Offline AI • Fast • Accurate',
+                  'Offline AI • On-Device • Fast',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[500],

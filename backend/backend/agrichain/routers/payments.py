@@ -1,23 +1,27 @@
 """
-Payment router — simulated payment gateway for AgriChain contracts.
-Supports Mobile Money (MTN/Airtel), Card, and Bank Transfer.
-Ready to swap in Flutterwave/Stripe with just API keys.
+Payment router — PesaPal API v3 integration for AgriChain contracts.
+Supports Mobile Money, Card, and Bank Transfer via PesaPal's hosted checkout.
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from agrichain.db.sqlite import connect, init_db, insert_ledger_event
+from agrichain.services import pesapal_service as pesapal
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
 # ── Exchange rate (demo) ──────────────────────────────────────
 UGX_PER_USD = 3750.0
+
+# ── IPN ID cache (registered once at startup) ────────────────
+_ipn_id: Optional[str] = None
 
 
 class PaymentRequest(BaseModel):
@@ -28,9 +32,7 @@ class PaymentRequest(BaseModel):
     payer_name: str
     payer_phone: Optional[str] = None
     payer_email: Optional[str] = None
-    # Card fields (optional, for card method)
     card_last4: Optional[str] = None
-    # MoMo fields
     momo_number: Optional[str] = None
 
 
@@ -48,6 +50,8 @@ class PaymentResponse(BaseModel):
     reference: str
     message: str
     created_at: str
+    redirect_url: Optional[str] = None
+    pesapal_tracking_id: Optional[str] = None
 
 
 def _method_label(method: str) -> str:
@@ -77,21 +81,36 @@ def _init_payments_table():
                 payer_email TEXT,
                 reference TEXT NOT NULL,
                 gateway_ref TEXT,
+                pesapal_tracking_id TEXT,
                 created_at TEXT NOT NULL,
                 completed_at TEXT
             )
         """)
+        # Add pesapal_tracking_id column if it doesn't exist (migration)
+        try:
+            conn.execute("ALTER TABLE payments ADD COLUMN pesapal_tracking_id TEXT")
+        except Exception:
+            pass  # Column already exists
 
 
 _init_payments_table()
 
 
+async def _ensure_ipn() -> str:
+    """Register IPN URL once, cache the ipn_id."""
+    global _ipn_id
+    if _ipn_id:
+        return _ipn_id
+    _ipn_id = await pesapal.register_ipn()
+    return _ipn_id
+
+
 @router.post("", response_model=PaymentResponse)
 async def create_payment(req: PaymentRequest):
     """
-    Process a payment for a contract.
-    In production, this would call Flutterwave/Stripe API.
-    For now, simulates a successful payment.
+    Initiate a payment via PesaPal.
+    Returns a redirect_url — the client should open this URL for the user
+    to complete payment on PesaPal's hosted checkout.
     """
     init_db()
 
@@ -117,38 +136,66 @@ async def create_payment(req: PaymentRequest):
     now = datetime.now(timezone.utc).isoformat()
     method_lbl = _method_label(req.method)
 
-    # ── In production, call Flutterwave/Stripe here ──
-    # flutterwave_response = await flutterwave.charge(...)
-    # For demo, we simulate instant success:
-    status = "COMPLETED"
-    gateway_ref = f"FLW-{uuid.uuid4().hex[:12].upper()}"
+    # ── PesaPal: Submit order ─────────────────────────────────
+    redirect_url = None
+    pesapal_tracking_id = None
+    status = "PENDING"
 
-    # Save payment
+    try:
+        ipn_id = await _ensure_ipn()
+
+        # Build billing address for PesaPal
+        billing = {}
+        if req.payer_email:
+            billing["email_address"] = req.payer_email
+        if req.payer_phone or req.momo_number:
+            billing["phone_number"] = req.payer_phone or req.momo_number
+        name_parts = req.payer_name.strip().split(" ", 1)
+        billing["first_name"] = name_parts[0]
+        if len(name_parts) > 1:
+            billing["last_name"] = name_parts[1]
+
+        pp_result = await pesapal.submit_order(
+            merchant_reference=reference,
+            amount=req.amount,
+            currency=req.currency,
+            description=f"AgriChain contract {req.contract_id} payment",
+            ipn_id=ipn_id,
+            billing=billing,
+        )
+
+        redirect_url = pp_result.get("redirect_url")
+        pesapal_tracking_id = pp_result.get("order_tracking_id")
+
+    except Exception as e:
+        # If PesaPal fails, still create the payment record as FAILED
+        status = "GATEWAY_ERROR"
+        redirect_url = None
+        import logging
+        logging.getLogger("agrichain.payments").error(f"PesaPal error: {e}")
+
+    # Save payment record
     with connect() as conn:
         conn.execute("""
             INSERT INTO payments (
                 payment_id, contract_id, amount, currency,
                 amount_ugx, amount_usd, method, method_label,
                 status, payer_name, payer_phone, payer_email,
-                reference, gateway_ref, created_at, completed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                reference, gateway_ref, pesapal_tracking_id,
+                created_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             payment_id, req.contract_id, req.amount, req.currency,
             amount_ugx, amount_usd, req.method, method_lbl,
             status, req.payer_name, req.payer_phone, req.payer_email,
-            reference, gateway_ref, now, now,
+            reference, None, pesapal_tracking_id,
+            now, None,
         ))
-
-        # Update contract status to PURCHASED
-        conn.execute(
-            "UPDATE contracts SET status='PURCHASED', buyer_name=?, updated_at=? WHERE id=?",
-            (req.payer_name, now, req.contract_id),
-        )
 
         # Record ledger event
         insert_ledger_event(
             conn,
-            action="PAYMENT_COMPLETED",
+            action="PAYMENT_INITIATED",
             actor=req.payer_name,
             contract_id=req.contract_id,
             meta={
@@ -156,9 +203,15 @@ async def create_payment(req: PaymentRequest):
                 "amount": f"{req.amount:.2f} {req.currency}",
                 "method": method_lbl,
                 "reference": reference,
-                "gateway_ref": gateway_ref,
+                "status": status,
             },
         )
+
+    msg = (
+        f"Payment initiated. Complete payment at PesaPal checkout."
+        if redirect_url
+        else f"Payment gateway error. Please try again."
+    )
 
     return PaymentResponse(
         payment_id=payment_id,
@@ -172,21 +225,156 @@ async def create_payment(req: PaymentRequest):
         status=status,
         payer_name=req.payer_name,
         reference=reference,
-        message=f"Payment of {req.amount:,.0f} {req.currency} via {method_lbl} completed successfully.",
+        message=msg,
         created_at=now,
+        redirect_url=redirect_url,
+        pesapal_tracking_id=pesapal_tracking_id,
     )
 
 
+# ── PesaPal IPN callback ─────────────────────────────────────
+@router.get("/ipn")
+async def pesapal_ipn(
+    OrderTrackingId: str = Query(...),
+    OrderMerchantReference: str = Query(...),
+    OrderNotificationType: str = Query(default=""),
+):
+    """
+    PesaPal sends a GET to this endpoint when a payment status changes.
+    We query PesaPal for the real status and update our DB.
+    """
+    try:
+        status_data = await pesapal.get_transaction_status(OrderTrackingId)
+    except Exception as e:
+        return {"orderNotificationType": "CHANGE", "orderTrackingId": OrderTrackingId, "status": 500}
+
+    pp_status = (status_data.get("payment_status_description") or "").upper()
+    confirmation_code = status_data.get("confirmation_code", "")
+    payment_method = status_data.get("payment_method", "")
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM payments WHERE pesapal_tracking_id=? OR reference=?",
+            (OrderTrackingId, OrderMerchantReference),
+        ).fetchone()
+
+        if row:
+            new_status = "COMPLETED" if pp_status == "COMPLETED" else (
+                "FAILED" if pp_status in ("FAILED", "INVALID") else pp_status
+            )
+
+            conn.execute(
+                """UPDATE payments
+                   SET status=?, gateway_ref=?, completed_at=?
+                   WHERE payment_id=?""",
+                (new_status, confirmation_code, now, row["payment_id"]),
+            )
+
+            # If payment completed, update contract status
+            if new_status == "COMPLETED":
+                conn.execute(
+                    "UPDATE contracts SET status='PURCHASED', buyer_name=?, updated_at=? WHERE id=?",
+                    (row["payer_name"], now, row["contract_id"]),
+                )
+                insert_ledger_event(
+                    conn,
+                    action="PAYMENT_COMPLETED",
+                    actor=row["payer_name"],
+                    contract_id=row["contract_id"],
+                    meta={
+                        "payment_id": row["payment_id"],
+                        "gateway_ref": confirmation_code,
+                        "payment_method": payment_method,
+                        "pesapal_status": pp_status,
+                    },
+                )
+
+    return {
+        "orderNotificationType": "CHANGE",
+        "orderTrackingId": OrderTrackingId,
+        "orderMerchantReference": OrderMerchantReference,
+        "status": 200,
+    }
+
+
+# ── PesaPal callback (user redirect after payment) ───────────
+@router.get("/callback")
+async def pesapal_callback(
+    OrderTrackingId: str = Query(default=""),
+    OrderMerchantReference: str = Query(default=""),
+):
+    """
+    PesaPal redirects the user here after payment.
+    We query the status and return it (Flutter app polls this).
+    """
+    if OrderTrackingId:
+        try:
+            status_data = await pesapal.get_transaction_status(OrderTrackingId)
+            pp_status = (status_data.get("payment_status_description") or "").upper()
+
+            return {
+                "status": pp_status,
+                "tracking_id": OrderTrackingId,
+                "reference": OrderMerchantReference,
+                "message": f"Payment {pp_status.lower()}.",
+            }
+        except Exception:
+            pass
+
+    return {
+        "status": "UNKNOWN",
+        "tracking_id": OrderTrackingId,
+        "reference": OrderMerchantReference,
+        "message": "Payment status could not be determined. Please check your app.",
+    }
+
+
+# ── Existing endpoints ────────────────────────────────────────
 @router.get("/{payment_id}")
 async def get_payment(payment_id: str):
+    """Get payment details. Flutter polls this to check if payment completed."""
     _init_payments_table()
+
     with connect() as conn:
         row = conn.execute(
             "SELECT * FROM payments WHERE payment_id=?", (payment_id,)
         ).fetchone()
+
     if row is None:
         raise HTTPException(status_code=404, detail="Payment not found")
-    return dict(row)
+
+    result = dict(row)
+
+    # If still PENDING and we have a tracking ID, check PesaPal for latest status
+    if result.get("status") == "PENDING" and result.get("pesapal_tracking_id"):
+        try:
+            status_data = await pesapal.get_transaction_status(
+                result["pesapal_tracking_id"]
+            )
+            pp_status = (status_data.get("payment_status_description") or "").upper()
+
+            if pp_status in ("COMPLETED", "FAILED", "INVALID", "REVERSED"):
+                now = datetime.now(timezone.utc).isoformat()
+                new_status = "COMPLETED" if pp_status == "COMPLETED" else "FAILED"
+
+                with connect() as conn:
+                    conn.execute(
+                        "UPDATE payments SET status=?, completed_at=? WHERE payment_id=?",
+                        (new_status, now, payment_id),
+                    )
+                    if new_status == "COMPLETED":
+                        conn.execute(
+                            "UPDATE contracts SET status='PURCHASED', buyer_name=?, updated_at=? WHERE id=?",
+                            (result["payer_name"], now, result["contract_id"]),
+                        )
+
+                result["status"] = new_status
+        except Exception:
+            pass  # Can't reach PesaPal, return cached status
+
+    return result
 
 
 @router.get("")

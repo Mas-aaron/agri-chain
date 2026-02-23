@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:agri_chain/config/app_config.dart';
 import 'package:agri_chain/services/contracts_api_service.dart';
+import 'package:agri_chain/screens/blockchain/pesapal_payment_screen.dart';
 
 /// Exchange rate for demo
 const _ugxPerUsd = 3750.0;
@@ -76,6 +79,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
     });
 
     try {
+      // 1) Create payment on backend → get PesaPal redirect URL
       final uri = Uri.parse('${AppConfig.apiBaseUrl}/payments');
       final body = {
         'contract_id': widget.contract.id,
@@ -102,11 +106,88 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       }
 
       final result = jsonDecode(resp.body) as Map<String, dynamic>;
-      setState(() {
-        _paymentResult = result;
-        _step = _PayStep.success;
-        _processing = false;
-      });
+      final redirectUrl = result['redirect_url'] as String?;
+      final paymentId = result['payment_id'] as String?;
+
+      if (redirectUrl == null || redirectUrl.isEmpty) {
+        throw Exception(result['message'] ?? 'Failed to get payment URL');
+      }
+
+      setState(() => _processing = false);
+
+      // 2) Open PesaPal checkout
+      if (!mounted) return;
+
+      if (kIsWeb) {
+        // On web: open in new browser tab
+        final url = Uri.parse(redirectUrl);
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+        // Show a dialog telling user to complete payment in the new tab
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.open_in_new, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Complete Payment'),
+              ],
+            ),
+            content: const Text(
+              'A new tab has opened for PesaPal checkout.\n\n'
+              'Complete your payment there, then tap "I\'ve Paid" below.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("I've Paid"),
+              ),
+            ],
+          ),
+        );
+      } else {
+        // On mobile: use in-app WebView
+        await Navigator.push<Map<String, dynamic>>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PesapalPaymentScreen(checkoutUrl: redirectUrl),
+          ),
+        );
+      }
+
+      // 3) After WebView closes, poll backend for final status
+      if (paymentId != null) {
+        setState(() => _processing = true);
+
+        // Poll up to 5 times with 2s interval
+        Map<String, dynamic>? finalResult;
+        for (int i = 0; i < 5; i++) {
+          await Future.delayed(const Duration(seconds: 2));
+          try {
+            final statusResp = await http.get(
+              Uri.parse('${AppConfig.apiBaseUrl}/payments/$paymentId'),
+            );
+            if (statusResp.statusCode == 200) {
+              finalResult = jsonDecode(statusResp.body) as Map<String, dynamic>;
+              if (finalResult['status'] == 'COMPLETED' ||
+                  finalResult['status'] == 'FAILED') {
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+
+        setState(() {
+          _paymentResult = finalResult ?? result;
+          _step = _PayStep.success;
+          _processing = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -428,7 +509,7 @@ class _PaymentSheetState extends State<_PaymentSheet> {
               Icon(Icons.shield_outlined, size: 14, color: scheme.onSurfaceVariant),
               const SizedBox(width: 4),
               Text(
-                'Secured by Hyperledger Fabric blockchain',
+                'Secured by PesaPal & Hyperledger Fabric',
                 style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),
             ],

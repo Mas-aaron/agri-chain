@@ -4,6 +4,7 @@ import 'package:agri_chain/home_screen.dart';
 import 'package:agri_chain/screens/tabs/alerts_tab.dart';
 import 'package:agri_chain/screens/tabs/dashboard_tab.dart';
 import 'package:agri_chain/screens/tabs/fields_tab.dart';
+import 'package:agri_chain/screens/rover/field_map_screen.dart';
 import 'package:agri_chain/screens/tabs/settings_tab.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/screens/blockchain/contracts_screen.dart';
@@ -49,7 +50,7 @@ class _AppShellState extends State<AppShell> {
       case 5:
         return const HomeScreen(embedded: true);
       case 6:
-        return const FieldsTab();
+        return const FieldMapScreen();
       case 7:
         return const AlertsTab();
       case 8:

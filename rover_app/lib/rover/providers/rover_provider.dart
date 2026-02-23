@@ -17,6 +17,7 @@ class RoverProvider extends ChangeNotifier {
 
   RoverStatus _status = RoverStatus.disconnected;
   RoverInfo? _info;
+  GPSData _gpsData = GPSData.invalid;
 
   bool _isConnected = false;
   bool _isConnecting = false;
@@ -24,6 +25,7 @@ class RoverProvider extends ChangeNotifier {
 
   Timer? _statusTimer;
   Timer? _reconnectTimer;
+  Timer? _gpsTimer;
 
   SharedPreferences? _prefs;
 
@@ -32,6 +34,7 @@ class RoverProvider extends ChangeNotifier {
   BluetoothDevice? get bluetoothDevice => _bluetoothDevice;
   RoverStatus get status => _status;
   RoverInfo? get info => _info;
+  GPSData get gpsData => _gpsData;
   bool get isConnected => _isConnected;
   bool get isConnecting => _isConnecting;
   String get connectionMessage => _connectionMessage;
@@ -78,6 +81,7 @@ class RoverProvider extends ChangeNotifier {
 
         await fetchSystemInfo();
         startStatusPolling();
+        startGPSPolling();  // Start GPS polling on WiFi connect
 
         _isConnecting = false;
         notifyListeners();
@@ -290,6 +294,69 @@ class RoverProvider extends ChangeNotifier {
     await sendCommand(RoverCommand.stop);
   }
 
+  Future<void> fetchGPSData() async {
+    if (!_isConnected) return;
+
+    if (_connectionType == ConnectionType.wifi) {
+      try {
+        final response = await http
+            .get(Uri.parse('http://$_wifiIP/api/gps/data'))
+            .timeout(const Duration(seconds: 2));
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          print('📡 GPS API Response: ${data['is_valid']} - Lat: ${data['latitude']}, Lon: ${data['longitude']}, Sats: ${data['satellites']}');
+          _gpsData = GPSData.fromJson(data);
+          notifyListeners();
+        } else {
+          print('❌ GPS API Error: Status ${response.statusCode}');
+        }
+      } catch (e) {
+        print('❌ GPS Fetch Failed: $e');
+        // GPS data fetch failed, keep previous data
+      }
+    } else if (_connectionType == ConnectionType.bluetooth) {
+      // For Bluetooth, send GPS request command
+      sendBluetoothCommand('gps');
+    }
+  }
+
+  void startGPSPolling({Duration interval = const Duration(seconds: 2)}) {
+    _gpsTimer?.cancel();
+    _gpsTimer = Timer.periodic(interval, (_) {
+      fetchGPSData();
+    });
+  }
+
+  void stopGPSPolling() {
+    _gpsTimer?.cancel();
+    _gpsTimer = null;
+  }
+
+  Future<bool> sampleSoil() async {
+    if (!_isConnected) return false;
+
+    if (_connectionType == ConnectionType.wifi) {
+      try {
+        final response = await http
+            .get(Uri.parse('http://$_wifiIP/api/sample/soil'))
+            .timeout(const Duration(seconds: 2));
+
+        if (response.statusCode == 200) {
+          print('✓ Soil sampling started');
+          return true;
+        }
+      } catch (e) {
+        print('❌ Soil sampling failed: $e');
+      }
+    } else if (_connectionType == ConnectionType.bluetooth) {
+      sendBluetoothCommand('sample');
+      return true;
+    }
+    
+    return false;
+  }
+
   String _getCommandString(RoverCommand command) {
     switch (command) {
       case RoverCommand.forward:
@@ -331,6 +398,7 @@ class RoverProvider extends ChangeNotifier {
   @override
   void dispose() {
     stopStatusPolling();
+    stopGPSPolling();
     _reconnectTimer?.cancel();
     _bluetoothConnection?.dispose();
     super.dispose();

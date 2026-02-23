@@ -6,6 +6,7 @@ import 'splash_screen.dart';
 
 void main() {
   runApp(const MyApp());
+  //  = false;
 }
 
 class MyApp extends StatelessWidget {
@@ -17,6 +18,7 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => RoverProvider(),
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         title: 'ESP32 Rover',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),

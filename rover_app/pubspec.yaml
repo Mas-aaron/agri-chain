@@ -37,11 +37,11 @@ dependencies:
   provider: ^6.1.2
   http: ^1.2.2
   shared_preferences: ^2.3.2
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
   flutter_bluetooth_serial: ^0.4.0
-  web_socket_channel: ^2.4.0
-  connectivity_plus: ^5.0.2
-  flutter_joystick: ^0.0.3
+  web_socket_channel: ^3.0.3
+  connectivity_plus: ^7.0.0
+  flutter_joystick: ^0.2.2
   loading_animation_widget: ^1.2.0
 
 dev_dependencies:

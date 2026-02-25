@@ -4,6 +4,7 @@ import 'package:agri_chain/services/contracts_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/config/app_config.dart';
 import 'package:agri_chain/screens/blockchain/payment_flow.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class YieldContract {
   final String id;
@@ -44,12 +45,16 @@ class _ContractsScreenState extends State<ContractsScreen> {
   void initState() {
     super.initState();
     _api = ContractsApiService.fromBaseUrl(AppConfig.apiBaseUrl);
-    _future = _api.listContracts();
+    _reload();
   }
 
   void _reload() {
     setState(() {
-      _future = _api.listContracts();
+      _future = _api.listContracts().then((contracts) {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        // In a real app this is a backend query parameter. Here we filter locally.
+        return contracts.where((c) => c.farmerName == uid || c.buyerName == uid || uid == null).toList();
+      });
     });
   }
 
@@ -72,13 +77,18 @@ class _ContractsScreenState extends State<ContractsScreen> {
             icon: const Icon(Icons.add_circle_outline),
             onPressed: () async {
               try {
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not signed in')));
+                  return;
+                }
                 await _api.createContract(
-                  const ContractCreateRequest(
+                  ContractCreateRequest(
                     crop: 'Maize',
                     quantityKg: 1000,
                     unitPrice: 1200,
                     currency: 'UGX',
-                    farmerName: 'Demo Farmer',
+                    farmerName: user.uid,
                   ),
                 );
                 if (!context.mounted) return;

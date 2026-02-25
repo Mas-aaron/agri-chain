@@ -16,6 +16,7 @@ class FieldMapScreen extends StatefulWidget {
 }
 
 class _FieldMapScreenState extends State<FieldMapScreen> {
+  // Rover GPS State
   List<LatLng> _pathPoints = [];    // smoothed time-ordered trail
   List<LatLng> _hullPoints = [];    // convex hull for polygon
   List<LatLng> _rawPoints = [];
@@ -24,6 +25,11 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
   bool _showPolygon = true;
   int _totalReadings = 0;
   LatLng? _lastPosition;
+  
+  // Manual Drawing State
+  bool _isManualMode = false;
+  List<LatLng> _manualPoints = [];
+
   final MapController _mapController = MapController();
 
   @override
@@ -206,14 +212,45 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? _buildError()
-              : _rawPoints.isEmpty
-                  ? _buildEmpty()
-                  : _buildMap(scheme),
+      body: _buildBody(scheme),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          setState(() {
+            _isManualMode = !_isManualMode;
+            if (!_isManualMode) {
+              // Exiting manual mode; keep points until explicitly cleared or saved.
+              if (_manualPoints.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${_manualPoints.length} points mapped.'),
+                    action: SnackBarAction(label: 'Clear', onPressed: () {
+                      setState(() => _manualPoints.clear());
+                    }),
+                  ),
+                );
+              }
+            }
+          });
+        },
+        icon: Icon(_isManualMode ? Icons.check : Icons.draw),
+        label: Text(_isManualMode ? 'Done Drawing' : 'Draw Boundary'),
+        backgroundColor: _isManualMode ? Colors.green : scheme.primary,
+        foregroundColor: Colors.white,
+      ),
     );
+  }
+
+  Widget _buildBody(ColorScheme scheme) {
+    if (_isManualMode || (_manualPoints.isNotEmpty && !_loading)) {
+      return _buildMap(scheme);
+    }
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _error != null
+            ? _buildError()
+            : _rawPoints.isEmpty
+                ? _buildEmpty()
+                : _buildMap(scheme);
   }
 
   Widget _buildError() {
@@ -271,10 +308,13 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
   }
 
   Widget _buildMap(ColorScheme scheme) {
-    final center = _lastPosition ?? _rawPoints.first;
+    final center = _lastPosition ?? (_rawPoints.isNotEmpty ? _rawPoints.first : const LatLng(-1.286389, 36.817223));
     final allPoints = _showPolygon ? _hullPoints : _pathPoints;
-    final boundsPoints = allPoints.isNotEmpty ? allPoints : _rawPoints;
-    final bounds = LatLngBounds.fromPoints(boundsPoints);
+    final boundsPoints = _isManualMode || _manualPoints.isNotEmpty 
+        ? _manualPoints 
+        : (allPoints.isNotEmpty ? allPoints : _rawPoints);
+        
+    final bounds = boundsPoints.isNotEmpty ? LatLngBounds.fromPoints(boundsPoints) : null;
 
     return Stack(
       children: [
@@ -285,6 +325,11 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
             initialZoom: 18,
             maxZoom: 22,
             minZoom: 5,
+            onTap: (tapPosition, point) {
+              if (_isManualMode) {
+                setState(() => _manualPoints.add(point));
+              }
+            },
           ),
           children: [
             // OSM tile layer
@@ -293,8 +338,56 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
               userAgentPackageName: 'com.agrichain.app',
             ),
 
+            // MANUAL DRAWING MODE
+            if (_manualPoints.length >= 3)
+              PolygonLayer(
+                polygons: [
+                  Polygon(
+                    points: _manualPoints,
+                    color: Colors.orange.withOpacity(0.25),
+                    borderColor: Colors.orange.shade800,
+                    borderStrokeWidth: 3,
+                    isFilled: true,
+                  ),
+                ],
+              ),
+            if (_manualPoints.isNotEmpty)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: _manualPoints,
+                    color: Colors.orange,
+                    strokeWidth: 3,
+                  ),
+                ],
+              ),
+            if (_isManualMode || _manualPoints.isNotEmpty)
+              MarkerLayer(
+                markers: _manualPoints.map(
+                  (pt) => Marker(
+                    point: pt,
+                    width: 14,
+                    height: 14,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (_isManualMode) {
+                          setState(() => _manualPoints.remove(pt));
+                        }
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade800,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ).toList(),
+              ),
+
             // POLYGON MODE — convex hull (clean field boundary)
-            if (_showPolygon && _hullPoints.length >= 3)
+            if (!_isManualMode && _manualPoints.isEmpty && _showPolygon && _hullPoints.length >= 3)
               PolygonLayer(
                 polygons: [
                   Polygon(
@@ -308,7 +401,7 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
               ),
 
             // PATH MODE — smoothed trail
-            if (!_showPolygon)
+            if (!_isManualMode && _manualPoints.isEmpty && !_showPolygon)
               PolylineLayer(
                 polylines: [
                   Polyline(
@@ -319,56 +412,57 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
                 ],
               ),
 
-            // Markers
-            MarkerLayer(
-              markers: [
-                // Start flag
-                if (_rawPoints.isNotEmpty)
-                  Marker(
-                    point: _rawPoints.first,
-                    width: 32,
-                    height: 32,
-                    child: const Icon(Icons.flag, color: Colors.green, size: 28),
-                  ),
-                // Rover position (latest)
-                if (_rawPoints.length > 1)
-                  Marker(
-                    point: _rawPoints.last,
-                    width: 40,
-                    height: 40,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2E7D32),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
-                            blurRadius: 8,
-                          ),
-                        ],
-                      ),
-                      child: const Icon(Icons.my_location,
-                          color: Colors.white, size: 22),
+            // Markers (Rover)
+            if (!_isManualMode && _manualPoints.isEmpty)
+              MarkerLayer(
+                markers: [
+                  // Start flag
+                  if (_rawPoints.isNotEmpty)
+                    Marker(
+                      point: _rawPoints.first,
+                      width: 32,
+                      height: 32,
+                      child: const Icon(Icons.flag, color: Colors.green, size: 28),
                     ),
-                  ),
-                // Hull vertex markers
-                if (_showPolygon)
-                  ..._hullPoints.map(
-                    (pt) => Marker(
-                      point: pt,
-                      width: 14,
-                      height: 14,
+                  // Rover position (latest)
+                  if (_rawPoints.length > 1)
+                    Marker(
+                      point: _rawPoints.last,
+                      width: 40,
+                      height: 40,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF7B1FA2),
+                          color: const Color(0xFF2E7D32),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.my_location,
+                            color: Colors.white, size: 22),
+                      ),
+                    ),
+                  // Hull vertex markers
+                  if (_showPolygon)
+                    ..._hullPoints.map(
+                      (pt) => Marker(
+                        point: pt,
+                        width: 14,
+                        height: 14,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7B1FA2),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
 
@@ -401,16 +495,20 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _showPolygon
-                            ? 'Field Boundary (Convex Hull)'
-                            : 'Rover Trail (Smoothed)',
+                        _isManualMode || _manualPoints.isNotEmpty
+                            ? 'Manual Boundary'
+                            : (_showPolygon ? 'Field Boundary (Convex Hull)' : 'Rover Trail (Smoothed)'),
                         style: const TextStyle(
                             fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                       Text(
-                        _showPolygon
-                            ? '${_hullPoints.length} boundary vertices from $_totalReadings GPS points'
-                            : '$_totalReadings GPS points, ${_pathPoints.length} after filtering',
+                        _isManualMode
+                            ? 'Tap map to draw points. Tap point to delete.'
+                            : (_manualPoints.isNotEmpty
+                                ? '${_manualPoints.length} manual boundary points'
+                                : (_showPolygon
+                                    ? '${_hullPoints.length} boundary vertices from $_totalReadings GPS points'
+                                    : '$_totalReadings GPS points, ${_pathPoints.length} after filtering')),
                         style: TextStyle(
                             fontSize: 12, color: scheme.onSurfaceVariant),
                       ),
@@ -421,12 +519,14 @@ class _FieldMapScreenState extends State<FieldMapScreen> {
                   icon: const Icon(Icons.fit_screen),
                   tooltip: 'Fit to bounds',
                   onPressed: () {
-                    _mapController.fitCamera(
-                      CameraFit.bounds(
-                        bounds: bounds,
-                        padding: const EdgeInsets.all(50),
-                      ),
-                    );
+                    if (bounds != null) {
+                      _mapController.fitCamera(
+                        CameraFit.bounds(
+                          bounds: bounds,
+                          padding: const EdgeInsets.all(50),
+                        ),
+                      );
+                    }
                   },
                 ),
               ],

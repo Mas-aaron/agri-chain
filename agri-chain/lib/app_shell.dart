@@ -74,9 +74,9 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-    // Mobile layout — bottom nav with 5 key tabs
-    const mobileIndices = [0, 1, 2, 5, 8]; // Dashboard, Yield, Token Market, Scan, Settings
-    final mobileIndex = mobileIndices.indexOf(_index).clamp(0, 4);
+    // Mobile layout — bottom nav with 4 key tabs
+    const mobileIndices = [0, 2, 5, 8]; // Dashboard, Token Market, Scan, Settings
+    final mobileIndex = mobileIndices.indexOf(_index).clamp(0, 3);
 
     return Scaffold(
       body: _pageAt(_index),

@@ -140,12 +140,21 @@ class _HomeScreenState extends State<HomeScreen> {
           // Ignore alert creation failures
         }
 
+        final predictionsList = (result['predictions'] as List?)?.cast<Map<dynamic, dynamic>>() ?? [];
+        final typedPredictions = predictionsList.map((e) => e.cast<String, dynamic>()).toList();
+
+        if (typedPredictions.isEmpty) {
+          _showError('No predictions returned from the model.');
+          setState(() => _isLoading = false);
+          return;
+        }
+
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ResultsScreen(
               imageFile: imageFile,
-              predictions: result['predictions'],
+              predictions: typedPredictions,
               inferenceTime: result['inferenceTime'] ?? 0,
               selectedFieldId: selectedFieldId,
               cropModel: _cropModel,

@@ -33,3 +33,10 @@ android {
     }
 }
 
+rootProject.allprojects {
+    repositories {
+        flatDir {
+            dirs "${project(':mindspore_lite_flutter').projectDir}/libs"
+        }
+    }
+}

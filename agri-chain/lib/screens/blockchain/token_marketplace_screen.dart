@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:agri_chain/config/app_config.dart';
 import 'package:agri_chain/services/contracts_api_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // ─── Token Model ─────────────────────────────────────────────
 
@@ -207,6 +208,13 @@ class _TokenMarketplaceScreenState extends State<TokenMarketplaceScreen> {
   }
 
   void _showSignDialog(TokenAsset token) {
+    if (FirebaseAuth.instance.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must be signed in to sign a contract.')),
+      );
+      return;
+    }
+
     final nameController = TextEditingController();
     final orgController = TextEditingController(text: 'AgriFinance Ltd.');
 

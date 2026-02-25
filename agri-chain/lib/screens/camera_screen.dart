@@ -88,13 +88,17 @@ class _CameraScreenState extends State<CameraScreen> {
       final image = await controller.takePicture();
       if (!mounted) return;
 
-      // ── Dispose the camera BEFORE popping the route ────────────────────────
-      // Navigator.pop() triggers the widget's dispose() async-concurrently with
-      // CameraX teardown, causing a tagged-pointer heap corruption (SIGABRT MTE)
-      // on ARM64 / Android 12.  Explicitly disposing here, before navigation,
-      // serialises the teardown and prevents the race.
-      _controller = null;          // prevent dispose() from double-disposing
-      await controller.dispose();  // full CameraX teardown before we navigate
+      // ── Dispose the camera safely ──────────────────────────────────────────
+      // Unmount the CameraPreview first to prevent "disposed CameraController" crash
+      setState(() {
+        _controller = null; 
+      });
+      // Wait a frame so the flutter pipeline removes CameraPreview
+      await Future.delayed(const Duration(milliseconds: 50)); 
+      
+      try {
+        await controller.dispose();
+      } catch (_) {}
 
       if (!mounted) return;
       Navigator.pop(context, File(image.path));

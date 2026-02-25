@@ -7,10 +7,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
+import 'package:agri_chain/screens/traceability/traceability_screen.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/services/weather_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/rover/rover_entry_screen.dart';
+import 'package:agri_chain/home_screen.dart';
+import 'package:agri_chain/screens/tabs/alerts_tab.dart';
+import 'package:agri_chain/screens/tabs/fields_tab.dart';
+import 'package:agri_chain/screens/admin_panel_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 Color _alpha(Color c, double opacity) {
   final a = (opacity * 255).round().clamp(0, 255);
@@ -407,6 +413,8 @@ class DashboardTab extends StatelessWidget {
         final alerts = context.watch<AlertsProvider>().alerts;
 
         final isLoading = snapshot.connectionState == ConnectionState.waiting;
+        final currentUser = FirebaseAuth.instance.currentUser;
+        final isAdmin = currentUser?.email == 'admin@gmail.com' || (currentUser?.email?.endsWith('@gmail.com') ?? false);
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -492,42 +500,22 @@ class DashboardTab extends StatelessWidget {
                 subtitle: 'Connect and control your rover (WiFi / Bluetooth)',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const RoverEntryScreen()),
+                  MaterialPageRoute(builder: (_) => RoverEntryScreen()),
                 ),
               ),
-              const SizedBox(height: 10),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isNarrow = constraints.maxWidth < 520;
-                  if (isNarrow) {
-                    return const Column(
-                      children: [
-                        _WeatherFeatureCard(),
-                        SizedBox(height: 12),
-                        FeatureCard(
-                          icon: Icons.show_chart,
-                          title: 'Market prices',
-                          subtitle: 'Coming soon',
-                        ),
-                      ],
-                    );
-                  }
-
-                  return const Row(
-                    children: [
-                      Expanded(child: _WeatherFeatureCard()),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: FeatureCard(
-                          icon: Icons.show_chart,
-                          title: 'Market prices',
-                          subtitle: 'Coming soon',
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+              const _WeatherFeatureCard(),
+              if (isAdmin) ...[
+                const SizedBox(height: 10),
+                FeatureCard(
+                  icon: Icons.admin_panel_settings_outlined,
+                  title: 'Admin Panel',
+                  subtitle: 'Manage Agrochemicals & Sellers (Admins only)',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
 
               _RecentActivityCard(
@@ -555,8 +543,9 @@ class _QuickActionsRow extends StatelessWidget {
         Expanded(
           child: FilledButton.icon(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Use the bottom bar to open Scan.')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HomeScreen(embedded: false)),
               );
             },
             icon: const Icon(Icons.camera_alt_outlined),
@@ -567,9 +556,9 @@ class _QuickActionsRow extends StatelessWidget {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: () {
-              // Navigation is handled by the bottom nav; keep this as a gentle hint.
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Use the bottom bar to open Fields.')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FieldsTab()),
               );
             },
             icon: const Icon(Icons.map_outlined),
@@ -606,19 +595,20 @@ class _SecondaryActionsRow extends StatelessWidget {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const BlockchainHubScreen()),
+                MaterialPageRoute(builder: (_) => const TraceabilityScreen()),
               );
             },
-            icon: const Icon(Icons.hub_outlined),
-            label: const Text('Blockchain'),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('Traceability'),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: OutlinedButton.icon(
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Use the bottom bar to open Alerts.')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AlertsTab()),
               );
             },
             icon: const Icon(Icons.notifications_outlined),

@@ -12,3 +12,4 @@ xgboost>=1.7.0
 lightgbm>=4.0.0
 grpcio>=1.60.0
 cryptography>=41.0.0
+httpx>=0.25.0

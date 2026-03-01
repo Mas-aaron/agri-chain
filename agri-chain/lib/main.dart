@@ -8,27 +8,27 @@ import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
 import 'package:agri_chain/firebase_bootstrap.dart';
 import 'package:agri_chain/rover/providers/rover_provider.dart';
+import 'package:agri_chain/services/auth_service.dart';
+import 'package:agri_chain/services/recommendation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await FirebaseBootstrap.initialize();
+    await RecommendationService.init();
   } catch (e) {
     // Continue without Firebase if not configured
-    // print('Firebase init failed: $e');
   }
 
-  // Initialize TFLite service (do not block app startup on failure)
+  // We explicitly DO NOT initialize heavy ML models (TFLite or MindSpore) here.
+  // This prevents the black screen delay during app startup.
+  // Models will be lazy-loaded when the Camera Screen is opened.
   final tfliteService = TFLiteService();
-  try {
-    await tfliteService.initialize();
-  } catch (e) {
-    // Continue to app UI; service can retry later when needed
-  }
 
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
         Provider<TFLiteService>(create: (_) => tfliteService),
         ChangeNotifierProvider(create: (_) => ScanProvider()),
         ChangeNotifierProvider(create: (_) => FieldsProvider()),

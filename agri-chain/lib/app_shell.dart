@@ -4,6 +4,7 @@ import 'package:agri_chain/home_screen.dart';
 import 'package:agri_chain/screens/tabs/alerts_tab.dart';
 import 'package:agri_chain/screens/tabs/dashboard_tab.dart';
 import 'package:agri_chain/screens/tabs/fields_tab.dart';
+import 'package:agri_chain/screens/rover/field_map_screen.dart';
 import 'package:agri_chain/screens/tabs/settings_tab.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/screens/blockchain/contracts_screen.dart';
@@ -49,7 +50,7 @@ class _AppShellState extends State<AppShell> {
       case 5:
         return const HomeScreen(embedded: true);
       case 6:
-        return const FieldsTab();
+        return const FieldMapScreen();
       case 7:
         return const AlertsTab();
       case 8:
@@ -73,9 +74,9 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-    // Mobile layout — bottom nav with 5 key tabs
-    const mobileIndices = [0, 1, 2, 5, 8]; // Dashboard, Yield, Token Market, Scan, Settings
-    final mobileIndex = mobileIndices.indexOf(_index).clamp(0, 4);
+    // Mobile layout — bottom nav with 4 key tabs
+    const mobileIndices = [0, 2, 5, 8]; // Dashboard, Token Market, Scan, Settings
+    final mobileIndex = mobileIndices.indexOf(_index).clamp(0, 3);
 
     return Scaffold(
       body: _pageAt(_index),

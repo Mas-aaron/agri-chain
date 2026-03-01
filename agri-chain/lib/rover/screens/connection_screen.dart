@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/rover_model.dart';
 import '../providers/rover_provider.dart';
 import '../widgets/connection_card.dart';
+import '../../screens/rover/field_map_screen.dart';
 
 class RoverConnectionScreen extends StatefulWidget {
   const RoverConnectionScreen({super.key});
@@ -512,6 +513,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         title: const Text('Rover Control'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.map),
+            tooltip: 'Field Map',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FieldMapScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/features/admin/screens/admin_entry_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:agri_chain/services/auth_service.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
@@ -41,6 +43,7 @@ class SettingsTab extends StatelessWidget {
           subtitle: 'Coming soon',
         ),
         const SizedBox(height: 10),
+        const SizedBox(height: 10),
         FeatureCard(
           icon: Icons.admin_panel_settings_outlined,
           title: 'Admin',
@@ -49,6 +52,15 @@ class SettingsTab extends StatelessWidget {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AdminEntryScreen()),
             );
+          },
+        ),
+        const SizedBox(height: 10),
+        FeatureCard(
+          icon: Icons.logout_outlined,
+          title: 'Sign out',
+          subtitle: 'Log out of your farm account',
+          onTap: () async {
+            await context.read<AuthService>().signOut();
           },
         ),
       ],

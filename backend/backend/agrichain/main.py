@@ -12,6 +12,7 @@ from agrichain.routers.blockchain import router as blockchain_router
 from agrichain.routers.contracts import router as contracts_router
 from agrichain.routers.predict import router as predict_router
 from agrichain.routers.payments import router as payments_router
+from agrichain.routers.sensor_data import router as sensor_data_router
 
 
 @asynccontextmanager
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(contracts_router)
     app.include_router(blockchain_router)
     app.include_router(payments_router)
+    app.include_router(sensor_data_router)
 
     @app.get("/health", tags=["system"])
     async def health():

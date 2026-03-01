@@ -12,7 +12,20 @@
           "package_name": "com.example.agri_chain"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "540713348802-v24l69mosv9950e148mjme4v1ihf5fja.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.agri_chain",
+            "certificate_hash": "6e6f413bdb56ee2509a60151d9d3277a8ad4774d"
+          }
+        },
+        {
+          "client_id": "540713348802-cqjvqqjh3dlrkjue03incserb7fj3jhd.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCzsadLe76q9qK8OzgmzY6aYAu7A11-c08"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "540713348802-cqjvqqjh3dlrkjue03incserb7fj3jhd.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

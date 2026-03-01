@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/providers/fields_provider.dart';
+import 'package:agri_chain/screens/tabs/fields_tab.dart'; // Needed to push to FieldDetailScreen
 
 enum _AlertsFilter { all, unread, critical }
 
@@ -20,8 +22,10 @@ class _AlertsTabState extends State<AlertsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: context.read<AlertsProvider>().ensureLoaded(),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Alerts')),
+      body: FutureBuilder<void>(
+        future: context.read<AlertsProvider>().ensureLoaded(),
       builder: (context, snapshot) {
         final provider = context.watch<AlertsProvider>();
         final allAlerts = provider.alerts;
@@ -130,6 +134,7 @@ class _AlertsTabState extends State<AlertsTab> {
           ],
         );
       },
+    ),
     );
   }
 
@@ -365,6 +370,24 @@ class _AlertDetailScreen extends StatelessWidget {
                         ),
                       );
                     }),
+                  ],
+                  if (latest.fieldId != null && latest.fieldId!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('View Field'),
+                      onPressed: () {
+                        final field = context.read<FieldsProvider>().fields.where((f) => f.id == latest.fieldId).firstOrNull;
+                        if (field != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => FieldDetailScreen(field: field)),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Field no longer exists')));
+                        }
+                      },
+                    ),
                   ],
                 ],
               ),

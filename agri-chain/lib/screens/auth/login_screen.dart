@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:agri_chain/services/auth_service.dart';
-import 'package:agri_chain/home_screen.dart'; // Direct to Scanner
+import 'package:agri_chain/home_screen.dart';
 import 'package:agri_chain/screens/auth/register_screen.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 
@@ -19,6 +21,14 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   Future<void> _login() async {
+    // Check Firebase is initialized before attempting sign-in
+    if (Firebase.apps.isEmpty) {
+      setState(() => _error =
+          'Authentication is not available on this platform.\n'
+          'Please use the Android app to sign in, or tap "Continue as Guest" below.');
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -75,6 +85,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text('Sign in to manage your fields, view alerts, and access traceability.', textAlign: TextAlign.center),
                     const SizedBox(height: 32),
                     
+                    // Web notice: show when Firebase is not available
+                    if (kIsWeb && Firebase.apps.isEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Web demo mode — sign-in requires the Android app. '  
+                                'Use "Continue as Guest" to explore features.',
+                                style: TextStyle(color: Colors.blue.shade800, fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                     if (_error != null)
                       Container(
                         padding: const EdgeInsets.all(12),

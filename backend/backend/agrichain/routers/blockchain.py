@@ -143,7 +143,6 @@ async def execute_trade(payload: TradeRequest):
 
 @router.get("/market/crop/{crop_type}", response_model=Dict[str, Any])
 async def market_data(crop_type: str):
-    # Placeholder market response so the app UI can render.
     return {
         "cropType": crop_type,
         "currency": "USD",
@@ -151,3 +150,115 @@ async def market_data(crop_type: str):
         "lastUpdated": None,
         "source": "mock",
     }
+
+
+# ── Blockchain Explorer (human-readable HTML pages) ───────────────────────
+
+from fastapi.responses import HTMLResponse
+from agrichain.db.sqlite import connect as _db_connect
+
+_EXPLORER_CSS = """
+  body{font-family:system-ui,sans-serif;background:#0d1117;color:#e6edf3;
+       margin:0;padding:24px}
+  .card{background:#161b22;border:1px solid #30363d;border-radius:12px;
+        padding:24px;max-width:700px;margin:0 auto}
+  h1{font-size:1.1rem;font-weight:700;color:#58a6ff;margin:0 0 4px}
+  .sub{color:#8b949e;font-size:.85rem;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse}
+  tr:not(:last-child) td{border-bottom:1px solid #21262d}
+  td{padding:10px 4px;font-size:.9rem}
+  td:first-child{color:#8b949e;width:40%}
+  td:last-child{font-weight:600;word-break:break-all}
+  .chip{display:inline-block;padding:2px 10px;border-radius:20px;
+        font-size:.75rem;font-weight:700}
+  .listed{background:#1f6feb22;color:#58a6ff}
+  .purchased{background:#f0883e22;color:#f0883e}
+  .delivered{background:#3fb95022;color:#3fb950}
+  .token{background:#8b5cf622;color:#a78bfa}
+  .logo{font-size:1.4rem;font-weight:900;color:#3fb950;margin-bottom:16px}
+  .footer{text-align:center;color:#8b949e;font-size:.75rem;margin-top:16px}
+"""
+
+
+def _status_chip(status: str) -> str:
+    cls = status.lower()
+    return f'<span class="chip {cls}">{status}</span>'
+
+
+@router.get("/explorer/assets/{asset_id}", response_class=HTMLResponse)
+async def explorer_asset(asset_id: str):
+    """Human-readable block explorer page for a yield token asset."""
+    asset = STORE.get_asset(asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    rows = "".join(
+        f"<tr><td>{k}</td><td>{v}</td></tr>"
+        for k, v in {
+            "Asset ID": asset.get("assetId", asset_id),
+            "Token ID": asset.get("tokenId", "—"),
+            "Farmer ID": asset.get("farmerId", "—"),
+            "Crop Type": asset.get("cropType", "—"),
+            "Season": asset.get("season", "—"),
+            "Predicted Yield": f"{asset.get('predictedYield', 0):,.0f} kg",
+            "Confidence": f"{float(asset.get('confidence', 0))*100:.1f}%",
+            "Token Amount": f"{asset.get('tokenAmount', 0):,.2f}",
+            "Current Value": f"${float(asset.get('currentValue', 0)):,.2f} USD",
+            "Status": _status_chip(str(asset.get("status", "UNKNOWN"))),
+            "Created At": asset.get("createdAt", "—"),
+        }.items()
+    )
+
+    return HTMLResponse(f"""<!DOCTYPE html><html><head>
+<title>AgriChain Explorer — {asset_id}</title>
+<meta charset="UTF-8">
+<style>{_EXPLORER_CSS}</style></head><body>
+<div class="card">
+  <div class="logo">⛓ AgriChain</div>
+  <h1>Yield Token Asset</h1>
+  <div class="sub">Hyperledger Fabric · yieldchannel · AgriToken chaincode</div>
+  <table>{rows}</table>
+  <div class="footer">AgriChain — Huawei Cloud BCS · ECS · SWR</div>
+</div></body></html>""")
+
+
+@router.get("/explorer/contracts/{contract_id}", response_class=HTMLResponse)
+async def explorer_contract(contract_id: str):
+    """Human-readable block explorer page for a harvest contract."""
+    with _db_connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM contracts WHERE id = ?", (contract_id,)
+        ).fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    c = dict(row)
+    total = float(c.get("quantity_kg", 0)) * float(c.get("unit_price", 0))
+    rows = "".join(
+        f"<tr><td>{k}</td><td>{v}</td></tr>"
+        for k, v in {
+            "Contract ID": c.get("id", contract_id),
+            "Crop": c.get("crop", "—"),
+            "Quantity": f"{float(c.get('quantity_kg', 0)):,.0f} kg",
+            "Unit Price": f"{float(c.get('unit_price', 0)):,.2f} {c.get('currency', 'USD')}",
+            "Total Value": f"{total:,.2f} {c.get('currency', 'USD')}",
+            "Farmer": c.get("farmer_name", "—"),
+            "Buyer": c.get("buyer_name") or "Not yet purchased",
+            "Status": _status_chip(str(c.get("status", "UNKNOWN"))),
+            "Created At": c.get("created_at", "—"),
+            "Updated At": c.get("updated_at", "—"),
+        }.items()
+    )
+
+    return HTMLResponse(f"""<!DOCTYPE html><html><head>
+<title>AgriChain Explorer — {contract_id}</title>
+<meta charset="UTF-8">
+<style>{_EXPLORER_CSS}</style></head><body>
+<div class="card">
+  <div class="logo">⛓ AgriChain</div>
+  <h1>Harvest Contract</h1>
+  <div class="sub">Hyperledger Fabric · yieldchannel · FutureHarvest chaincode</div>
+  <table>{rows}</table>
+  <div class="footer">AgriChain — Huawei Cloud BCS · ECS · SWR</div>
+</div></body></html>""")

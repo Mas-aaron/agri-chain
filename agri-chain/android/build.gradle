@@ -23,6 +23,11 @@ allprojects {
 // field. Inject it here to keep builds working without patching pub cache.
 subprojects { subproject ->
     afterEvaluate {
+        if (subproject.hasProperty('android')) {
+            subproject.android {
+                compileSdk = 36
+            }
+        }
         if (subproject.name == 'flutter_bluetooth_serial') {
             def androidExt = subproject.extensions.findByName('android')
             if (androidExt != null && androidExt.hasProperty('namespace') && androidExt.namespace == null) {

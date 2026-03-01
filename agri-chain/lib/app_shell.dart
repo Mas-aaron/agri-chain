@@ -11,6 +11,7 @@ import 'package:agri_chain/screens/blockchain/contracts_screen.dart';
 import 'package:agri_chain/screens/blockchain/ledger_screen.dart';
 import 'package:agri_chain/screens/blockchain/token_marketplace_screen.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
+import 'package:agri_chain/screens/blockchain/loans_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -24,15 +25,16 @@ class _AppShellState extends State<AppShell> {
 
   // All pages accessible from both mobile and web
   static const _navItems = <_NavItem>[
-    _NavItem(icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: 'Dashboard'),
-    _NavItem(icon: Icons.auto_graph_outlined, selectedIcon: Icons.auto_graph, label: 'Yield Forecast'),
-    _NavItem(icon: Icons.token_outlined, selectedIcon: Icons.token, label: 'Token Market'),
-    _NavItem(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: 'Contracts'),
-    _NavItem(icon: Icons.receipt_long_outlined, selectedIcon: Icons.receipt_long, label: 'Ledger'),
-    _NavItem(icon: Icons.camera_alt_outlined, selectedIcon: Icons.camera_alt, label: 'Disease Scan'),
-    _NavItem(icon: Icons.map_outlined, selectedIcon: Icons.map, label: 'Fields'),
-    _NavItem(icon: Icons.notifications_outlined, selectedIcon: Icons.notifications, label: 'Alerts'),
-    _NavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'Settings'),
+    _NavItem(icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: 'Dashboard'),        // 0
+    _NavItem(icon: Icons.auto_graph_outlined, selectedIcon: Icons.auto_graph, label: 'Yield Forecast'), // 1
+    _NavItem(icon: Icons.token_outlined, selectedIcon: Icons.token, label: 'Token Market'),             // 2
+    _NavItem(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: 'Contracts'),      // 3
+    _NavItem(icon: Icons.receipt_long_outlined, selectedIcon: Icons.receipt_long, label: 'Ledger'),     // 4
+    _NavItem(icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: 'Loans'),// 5
+    _NavItem(icon: Icons.camera_alt_outlined, selectedIcon: Icons.camera_alt, label: 'Disease Scan'),   // 6
+    _NavItem(icon: Icons.map_outlined, selectedIcon: Icons.map, label: 'Fields'),                       // 7
+    _NavItem(icon: Icons.notifications_outlined, selectedIcon: Icons.notifications, label: 'Alerts'),   // 8
+    _NavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'Settings'),           // 9
   ];
 
   Widget _pageAt(int i) {
@@ -48,12 +50,14 @@ class _AppShellState extends State<AppShell> {
       case 4:
         return const LedgerScreen();
       case 5:
-        return const HomeScreen(embedded: true);
+        return LoansScreen(onNavigateToMarketplace: () => setState(() => _index = 2));
       case 6:
-        return const FieldMapScreen();
+        return const HomeScreen(embedded: true);
       case 7:
-        return const AlertsTab();
+        return const FieldMapScreen();
       case 8:
+        return const AlertsTab();
+      case 9:
         return const SettingsTab();
       default:
         return const DashboardTab();
@@ -75,7 +79,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     // Mobile layout — bottom nav with 4 key tabs
-    const mobileIndices = [0, 2, 5, 8]; // Dashboard, Token Market, Scan, Settings
+    const mobileIndices = [0, 2, 6, 9]; // Dashboard, Token Market, Scan, Settings
     final mobileIndex = mobileIndices.indexOf(_index).clamp(0, 3);
 
     return Scaffold(

@@ -12,6 +12,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <TinyGPS++.h>  // GPS library
+
 #include <ESP32Servo.h>  // Servo library for soil sampling
 
 // ============== PIN DEFINITIONS ==============
@@ -29,6 +30,12 @@
 #define GPS_RX 16  // RX pin for GPS module
 #define GPS_TX 17  // TX pin for GPS module
 #define GPS_BAUD 9600  // Standard GPS module baud rate
+
+// NPK Sensor Pins (RS485 to TTL - Serial1 UART)
+#define NPK_RX 13      // RO (Receive Out) - Safe pin
+#define NPK_TX 14      // DI (Data In) - Safe pin
+#define NPK_DE_RE 27   // DE & RE connected together - Safe pin
+#define NPK_BAUD 9600  // NPK sensor baud rate (TAIDCENT CWT-SOIL-NPKPHCTH-S)
 
 // ============== WIFI CONFIGURATION ==============
 const char* ssid = "ESP32_Rover";
@@ -68,6 +75,33 @@ struct {
 
 unsigned long gpsLastByteTime = 0;
 unsigned long gpsLastHeartbeatTime = 0;
+
+// ============== NPK SENSOR CONFIGURATION ==============
+HardwareSerial npkSerial(1); // Serial1 for RS485 module
+
+struct {
+  float moisture = 0.0;
+  float temperature = 0.0;
+  float ec = 0.0;
+  float ph = 0.0;
+  float nitrogen = 0.0;
+  float phosphorus = 0.0;
+  float potassium = 0.0;
+  unsigned long lastReadTime = 0;
+  bool isValid = false;
+} npkData;
+
+// TAIDCENT CWT-SOIL-NPKPHCTH-S register addresses (single-byte reads)
+const uint16_t REG_NITROGEN   = 0x07DA;
+const uint16_t REG_PHOSPHORUS = 0x07E4;
+const uint16_t REG_POTASSIUM  = 0x07EE;
+const uint16_t REG_PH         = 0x07F8;
+const uint16_t REG_MOISTURE   = 0x0802;
+const uint16_t REG_TEMP       = 0x080C;
+const uint16_t REG_EC         = 0x0816;
+
+unsigned long npkLastUpdate = 0;
+const unsigned long NPK_UPDATE_INTERVAL_MS = 5000; // Read sensor every 5 seconds
 
 // ============== SOIL SAMPLING ==============
 Servo servo1;  // Sampling arm servo
@@ -166,6 +200,7 @@ void setup() {
   // Initialize all systems
   initPins();
   initGPS();
+  initNPKSensor();
   initServos();
   initBluetooth();
   initWiFi();
@@ -208,6 +243,23 @@ void initGPS() {
   Serial.println(F(" ✓"));
   Serial.println(F("  └─ Baud Rate: 9600"));
   Serial.println(F("  └─ Listening for satellite data..."));
+}
+
+void initNPKSensor() {
+  Serial.print(F("Initializing NPK Sensor..."));
+  
+  pinMode(NPK_DE_RE, OUTPUT);
+  digitalWrite(NPK_DE_RE, LOW); // Start in receive mode
+  
+  // Some TTL to RS485 modules (MAX485 clones) have inverted logic levels on the ESP32
+  // If the standard configuration produces FF FF FF, we try inverting the RX/TX signals
+  // bool invert = false; (standard) -> change to true if it still outputs FF
+  npkSerial.begin(NPK_BAUD, SERIAL_8N1, NPK_RX, NPK_TX);
+  
+  Serial.println(F(" ✓"));
+  Serial.println(F("  └─ Baud Rate: 9600"));
+  Serial.println(F("  └─ RS485 DE/RE: GPIO 27"));
+  Serial.println(F("  └─ Sensor: TAIDCENT CWT-SOIL-NPKPHCTH-S"));
 }
 
 void initServos() {
@@ -307,6 +359,17 @@ void publishGpsTelemetry() {
   props["course"] = gpsData.course;
   props["sat"] = gpsData.satellites;
   props["hdop"] = gpsData.hdop;
+  
+  // Attach NPK data if valid
+  if (npkData.isValid) {
+    props["nitrogen"] = npkData.nitrogen;
+    props["phosphorus"] = npkData.phosphorus;
+    props["potassium"] = npkData.potassium;
+    props["moisture"] = npkData.moisture;
+    props["temperature"] = npkData.temperature;
+    props["ec"] = npkData.ec;
+    props["ph"] = npkData.ph;
+  }
 
   char payload[512];
   size_t n = serializeJson(doc, payload, sizeof(payload));
@@ -340,13 +403,17 @@ void postSensorDataToBackend() {
   doc["course"] = gpsData.course;
   doc["satellites"] = gpsData.satellites;
   doc["hdop"] = gpsData.hdop;
-  // NPK fields will be added here when sensor is integrated
-  // doc["nitrogen"] = npkData.nitrogen;
-  // doc["phosphorus"] = npkData.phosphorus;
-  // doc["potassium"] = npkData.potassium;
-  // doc["temperature"] = npkData.temperature;
-  // doc["humidity"] = npkData.humidity;
-  // doc["ph"] = npkData.ph;
+  
+  // Add NPK fields if sensor has valid reading
+  if (npkData.isValid) {
+    doc["nitrogen"] = npkData.nitrogen;
+    doc["phosphorus"] = npkData.phosphorus;
+    doc["potassium"] = npkData.potassium;
+    doc["temperature"] = npkData.temperature;
+    doc["humidity"] = npkData.moisture; // Map moisture to humidity for backend
+    doc["ph"] = npkData.ph;
+    doc["ec"] = npkData.ec;
+  }
 
   char payload[512];
   serializeJson(doc, payload, sizeof(payload));
@@ -483,6 +550,7 @@ void initWebServer() {
   // Status endpoints
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/info", HTTP_GET, handleInfo);
+  server.on("/api/npk", HTTP_GET, handleNPKData);
   
   // Movement endpoints (full words)
   server.on("/api/forward", HTTP_GET, handleForward);
@@ -536,6 +604,7 @@ void initWebServer() {
 void loop() {
   handleBluetooth();          // Handle Bluetooth commands
   updateGPS();                // Read GPS data
+  updateNPKSensor();          // Read NPK soil sensor
   handleMQTT();               // Huawei IoT MQTT
   postSensorDataToBackend();  // AgriChain backend HTTP POST
   updateSystemStatus();       // Update system status
@@ -598,6 +667,7 @@ void handleInfo() {
   JsonArray endpoints = doc.createNestedArray("endpoints");
   endpoints.add("GET /api/status");
   endpoints.add("GET /api/info");
+  endpoints.add("GET /api/npk");
   endpoints.add("GET /api/gps/data");
   endpoints.add("GET /api/forward");
   endpoints.add("GET /api/backward");
@@ -686,6 +756,22 @@ void handleGPS() {
   } else {
     Serial.println(F(" ✗ → NO FIX (searching)"));
   }
+}
+
+void handleNPKData() {
+  String response = "{";
+  response += "\"moisture\":" + String(npkData.moisture, 1) + ",";
+  response += "\"temperature\":" + String(npkData.temperature, 1) + ",";
+  response += "\"ec\":" + String(npkData.ec, 0) + ",";
+  response += "\"ph\":" + String(npkData.ph, 1) + ",";
+  response += "\"nitrogen\":" + String(npkData.nitrogen, 0) + ",";
+  response += "\"phosphorus\":" + String(npkData.phosphorus, 0) + ",";
+  response += "\"potassium\":" + String(npkData.potassium, 0) + ",";
+  response += "\"timestamp\":" + String((unsigned long)millis()) + ",";
+  response += "\"is_valid\":" + String(npkData.isValid ? "true" : "false");
+  response += "}";
+  
+  server.send(200, "application/json", response);
 }
 
 void handleSoilSample() {
@@ -1261,6 +1347,100 @@ void updateGPS() {
         Serial.println(F("s"));
       }
     }
+  }
+}
+
+// ============== NPK SENSOR FUNCTIONS ==============
+
+// Calculate Modbus RTU CRC-16
+uint16_t calculateCRC(byte* data, uint8_t len) {
+  uint16_t crc = 0xFFFF;
+  for (uint8_t i = 0; i < len; i++) {
+    crc ^= (uint16_t)data[i];
+    for (uint8_t j = 0; j < 8; j++) {
+      if (crc & 0x0001) {
+        crc >>= 1;
+        crc ^= 0xA001;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc;
+}
+
+// Read a single byte value from a sensor register via Modbus RTU
+uint8_t readNPKRegisterByte(uint16_t reg) {
+  byte query[8];
+  query[0] = 0x01;               // Device address
+  query[1] = 0x03;               // Function code: Read Holding Registers
+  query[2] = (reg >> 8) & 0xFF;  // Register high byte
+  query[3] = reg & 0xFF;         // Register low byte
+  query[4] = 0x00;               // Count high byte
+  query[5] = 0x01;               // Count low byte (1 register)
+
+  uint16_t crc = calculateCRC(query, 6);
+  query[6] = crc & 0xFF;
+  query[7] = (crc >> 8) & 0xFF;
+
+  // Flush any stale bytes
+  while (npkSerial.available()) npkSerial.read();
+
+  // Transmit
+  digitalWrite(NPK_DE_RE, HIGH);
+  delay(2);
+  npkSerial.write(query, 8);
+  npkSerial.flush();
+  delay(3);
+  digitalWrite(NPK_DE_RE, LOW);
+
+  // Wait up to 100 ms for the first byte
+  unsigned long t0 = millis();
+  while (!npkSerial.available() && millis() - t0 < 100);
+
+  if (npkSerial.available()) {
+    return npkSerial.read();
+  }
+  return 0;
+}
+
+void updateNPKSensor() {
+  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) {
+    return;
+  }
+  npkLastUpdate = millis();
+
+  // Read each parameter individually (single-byte technique from working sketch)
+  uint8_t n        = readNPKRegisterByte(REG_NITROGEN);
+  uint8_t p        = readNPKRegisterByte(REG_PHOSPHORUS);
+  uint8_t k        = readNPKRegisterByte(REG_POTASSIUM);
+  uint8_t ph_raw   = readNPKRegisterByte(REG_PH);
+  uint8_t moist    = readNPKRegisterByte(REG_MOISTURE);
+  uint8_t temp_raw = readNPKRegisterByte(REG_TEMP);
+  uint8_t ec_raw   = readNPKRegisterByte(REG_EC);
+
+  npkData.nitrogen     = n;
+  npkData.phosphorus   = p;
+  npkData.potassium    = k;
+  npkData.ph           = ph_raw / 10.0f;   // e.g. 65 -> 6.5
+  npkData.moisture     = moist;
+  npkData.temperature  = temp_raw;
+  npkData.ec           = ec_raw;
+  npkData.lastReadTime = millis();
+
+  // Mark valid if at least one parameter is non-zero
+  npkData.isValid = (n || p || k || ph_raw || moist || temp_raw || ec_raw);
+
+  if (npkData.isValid) {
+    Serial.print(F("🌱 NPK: N=")); Serial.print(npkData.nitrogen, 0);
+    Serial.print(F(" P="));        Serial.print(npkData.phosphorus, 0);
+    Serial.print(F(" K="));        Serial.print(npkData.potassium, 0);
+    Serial.print(F(" pH="));       Serial.print(npkData.ph, 1);
+    Serial.print(F(" Moist="));    Serial.print(npkData.moisture, 0);
+    Serial.print(F("% Temp="));    Serial.print(npkData.temperature, 0);
+    Serial.print(F("C EC="));      Serial.println(npkData.ec, 0);
+  } else {
+    Serial.println(F("⚠️ NPK Sensor: all readings zero (no response or sensor off)"));
   }
 }
 

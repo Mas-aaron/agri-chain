@@ -86,8 +86,3 @@ flutter:
     - assets/coffee/
     - assets/images/
     - assets/models/
-    # Or include specific files
-    - assets/models/coffee_labels.txt
-    - assets/models/coffee_model.ms
-    - assets/models/maize_labels.txt
-    - assets/models/maize_model.ms

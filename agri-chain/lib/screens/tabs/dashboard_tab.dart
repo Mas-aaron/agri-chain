@@ -7,12 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
+import 'package:agri_chain/screens/blockchain/contracts_screen.dart';
+import 'package:agri_chain/screens/blockchain/loans_screen.dart';
 import 'package:agri_chain/screens/traceability/traceability_screen.dart';
 import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/services/weather_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/rover/rover_entry_screen.dart';
-import 'package:agri_chain/home_screen.dart';
+
 import 'package:agri_chain/screens/tabs/alerts_tab.dart';
 import 'package:agri_chain/screens/tabs/fields_tab.dart';
 import 'package:agri_chain/screens/admin_panel_screen.dart';
@@ -427,7 +429,7 @@ class DashboardTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             children: [
               ImageHeroCard(
-                assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
+                imageUrl: 'https://images.unsplash.com/photo-1581001808603-9d8f3ec200bc?w=800&q=80',
                 title: 'Welcome back',
                 subtitle: isLoading ? 'Loading your farm summary…' : 'Monitor fields, predict yield, and sell safely.',
               ),
@@ -538,45 +540,66 @@ class _QuickActionsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const HomeScreen(embedded: false)),
-              );
-            },
-            icon: const Icon(Icons.camera_alt_outlined),
-            label: const Text('Scan'),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ContractsScreen()),
+                  );
+                },
+                icon: const Icon(Icons.storefront_outlined),
+                label: const Text('Contracts'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => LoansScreen()),
+                  );
+                },
+                icon: const Icon(Icons.account_balance_outlined),
+                label: const Text('Loans'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const FieldsTab()),
-              );
-            },
-            icon: const Icon(Icons.map_outlined),
-            label: const Text('Fields'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const YieldPredictionScreen()),
-              );
-            },
-            icon: const Icon(Icons.auto_graph_outlined),
-            label: const Text('Yield'),
-          ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FieldsTab()),
+                  );
+                },
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Fields'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const YieldPredictionScreen()),
+                  );
+                },
+                icon: const Icon(Icons.auto_graph_outlined),
+                label: const Text('Yield'),
+              ),
+            ),
+          ],
         ),
       ],
     );

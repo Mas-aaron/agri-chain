@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:agri_chain/config/app_config.dart';
 import 'package:agri_chain/services/contracts_api_service.dart';
+import 'package:agri_chain/screens/blockchain/loan_application_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // ─── Token Model ─────────────────────────────────────────────
@@ -386,6 +388,27 @@ class _TokenCard extends StatelessWidget {
 
   const _TokenCard({required this.token, required this.onSign});
 
+  Future<void> _openExplorer(BuildContext context) async {
+    final url = Uri.parse(
+        '${AppConfig.explorerBaseUrl}/assets/${token.assetId}');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open blockchain explorer')),
+      );
+    }
+  }
+
+  void _openLoanScreen(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LoanApplicationScreen(token: token),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -610,20 +633,35 @@ class _TokenCard extends StatelessWidget {
             ),
           ),
 
-          // ── Sign Button ──
+          // ── Action Buttons ──
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onSign,
-                icon: const Icon(Icons.draw, size: 18),
-                label: const Text('Sign Contract'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onSign,
+                    icon: const Icon(Icons.draw, size: 18),
+                    label: const Text('Sign Contract'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => _openExplorer(context),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Icon(Icons.open_in_new, size: 16),
+                ),
+              ],
             ),
           ),
         ],

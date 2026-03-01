@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:agri_chain/config/app_config.dart';
 import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
 import 'package:agri_chain/features/blockchain/config/blockchain_config.dart';
 import 'package:agri_chain/features/blockchain/models/yield_asset.dart';
@@ -441,11 +443,20 @@ class _TokenizeYieldScreenState extends State<TokenizeYieldScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      // TODO: View on blockchain explorer
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Blockchain explorer coming soon')),
-                      );
+                    onPressed: () async {
+                      final explorerUrl = Uri.parse(
+                          '${AppConfig.explorerBaseUrl}/assets/${_assetId ?? ''}');
+                      if (await canLaunchUrl(explorerUrl)) {
+                        await launchUrl(explorerUrl,
+                            mode: LaunchMode.externalApplication);
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Could not open blockchain explorer')),
+                          );
+                        }
+                      }
                     },
                     icon: const Icon(Icons.open_in_new),
                     label: const Text('View on Blockchain'),

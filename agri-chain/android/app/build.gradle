@@ -48,10 +48,10 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         
-        ndk {
-            // Nokia G21 is ARM-only; remove x86_64 to avoid packaging large ARM-incompatible libs
-            abiFilters 'armeabi-v7a', 'arm64-v8a'
-        }
+        // ndk {
+        //     // Nokia G21 is ARM-only; remove x86_64 to avoid packaging large ARM-incompatible libs
+        //     abiFilters 'armeabi-v7a', 'arm64-v8a'
+        // }
     }
     
     buildTypes {

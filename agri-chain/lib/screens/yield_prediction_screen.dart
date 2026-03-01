@@ -90,7 +90,7 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const ImageHeroCard(
-            assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
+            imageUrl: 'https://images.unsplash.com/photo-1581001808603-9d8f3ec200bc?w=800&q=80',
             title: 'Yield forecast',
             subtitle: 'Predict yield and tokenize on blockchain.',
           ),

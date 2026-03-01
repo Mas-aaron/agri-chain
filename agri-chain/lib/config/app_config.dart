@@ -22,6 +22,16 @@ class AppConfig {
   // API Configuration
   static const String _defaultApiBaseUrl = 'http://101.44.10.153:8000';
   static const String _prodApiBaseUrl = 'https://api.agrichain.com';
+
+  // Blockchain Explorer
+  /// Base URL for the Huawei BCS blockchain explorer.
+  /// Append /assets/{assetId} or /transactions/{txId} to form a direct link.
+  static String get explorerBaseUrl {
+    return switch (_kFlutterEnv) {
+      'production' => 'https://explorer.agrichain.com',
+      _ => '${apiBaseUrl}/blockchain/explorer',
+    };
+  }
   
   static String get apiBaseUrl {
     final raw = switch (_kFlutterEnv) {

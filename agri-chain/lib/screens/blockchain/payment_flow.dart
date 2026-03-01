@@ -118,6 +118,8 @@ class _PaymentSheetState extends State<_PaymentSheet> {
       // 2) Open PesaPal checkout
       if (!mounted) return;
 
+      Map<String, dynamic>? webviewResult;
+
       if (kIsWeb) {
         // On web: open in new browser tab
         final url = Uri.parse(redirectUrl);
@@ -152,7 +154,9 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         );
       } else {
         // On mobile: use in-app WebView
-        await Navigator.push<Map<String, dynamic>>(
+        // The new PesapalPaymentScreen detects callback in onPageStarted/onPageFinished/onUrlChange
+        // so it handles Android 302 redirects correctly.
+        webviewResult = await Navigator.push<Map<String, dynamic>>(
           context,
           MaterialPageRoute(
             builder: (_) => PesapalPaymentScreen(checkoutUrl: redirectUrl),
@@ -160,34 +164,59 @@ class _PaymentSheetState extends State<_PaymentSheet> {
         );
       }
 
-      // 3) After WebView closes, poll backend for final status
-      if (paymentId != null) {
+      // 3) After WebView closes, ALWAYS poll backend for final status.
+      // This is the reliable fallback — the WebView callback might have fired
+      // (webviewResult['completed'] == true) or the user may have closed it manually.
+      // Either way, we check with PesaPal via the backend.
+      if (mounted && paymentId != null) {
         setState(() => _processing = true);
 
-        // Poll up to 5 times with 2s interval
         Map<String, dynamic>? finalResult;
-        for (int i = 0; i < 5; i++) {
+
+        // Poll up to 6 times with 2s intervals (12s total)
+        for (int i = 0; i < 6; i++) {
           await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+
           try {
-            final statusResp = await http.get(
-              Uri.parse('${AppConfig.apiBaseUrl}/payments/$paymentId'),
-            );
+            final statusResp = await http
+                .get(Uri.parse('${AppConfig.apiBaseUrl}/payments/$paymentId'))
+                .timeout(const Duration(seconds: 8));
+
             if (statusResp.statusCode == 200) {
               finalResult = jsonDecode(statusResp.body) as Map<String, dynamic>;
-              if (finalResult['status'] == 'COMPLETED' ||
-                  finalResult['status'] == 'FAILED') {
+              final status = finalResult['status'] as String? ?? '';
+              if (status == 'COMPLETED' || status == 'FAILED') {
+                break; // Done — no need to keep polling
+              }
+              // Still PENDING — if WebView reported completion, wait a bit more
+              // for IPN to arrive at backend; otherwise short-circuit after 2 tries
+              if (webviewResult != null && webviewResult['completed'] != true && i >= 1) {
                 break;
               }
             }
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('Payment poll error: $e');
+            // Don't stop polling — network may be briefly unavailable
+          }
         }
 
+        if (mounted) {
+          setState(() {
+            _paymentResult = finalResult ?? result;
+            _step = _PayStep.success;
+            _processing = false;
+          });
+        }
+      } else if (mounted) {
+        // No paymentId — show whatever the initial result was
         setState(() {
-          _paymentResult = finalResult ?? result;
+          _paymentResult = result;
           _step = _PayStep.success;
           _processing = false;
         });
       }
+
     } catch (e) {
       setState(() {
         _error = e.toString();

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Allow cleartext HTTP to the AgriChain backend server IP and PesaPal domains.
+        All other traffic uses HTTPS (base-config).
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- AgriChain backend (Huawei ECS) -->
+        <domain includeSubdomains="true">101.44.10.153</domain>
+        <!-- PesaPal payment gateway -->
+        <domain includeSubdomains="true">pesapal.com</domain>
+        <domain includeSubdomains="true">pay.pesapal.com</domain>
+        <domain includeSubdomains="true">cybqa.pesapal.com</domain>
+    </domain-config>
+    <!-- Deny cleartext for everything else -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -19,6 +19,9 @@ docker compose up -d
 ### Step 3: Verify backend is running
 ```bash
 docker compose logs -f
+
+cd /root/backend-backend && docker compose logs --tail 50 -f agrichain-api
+
 ```
 Press `Ctrl+C` to stop viewing logs. Visit `http://101.44.10.153:8000/docs` in your browser.
 
@@ -40,7 +43,7 @@ scp .\backend\backend\agrichain\routers\payments.py root@101.44.10.153:/root/bac
 ```
 Then in SSH:
 ```bash
-cd /root/backend-backend && docker compose restart api
+cd /root/backend-backend && docker compose restart agrichain-api
 ```
 
 ### Backend dependency changes (requirements.txt or Dockerfile)

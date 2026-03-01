@@ -23,7 +23,7 @@ class FieldsTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
           children: [
             const ImageHeroCard(
-              assetPath: 'assets/images/sustainable-garden-harvesting-produce.jpg',
+              imageUrl: 'https://images.unsplash.com/photo-1595847321528-766cf018aeb5?w=800&q=80',
               title: 'Your fields',
               subtitle: 'Track each plot, monitor location, and link alerts to fields.',
             ),
@@ -55,7 +55,7 @@ class FieldsTab extends StatelessWidget {
                 final location = f.location.isEmpty ? 'Unknown location' : f.location;
                 final sizeText = (f.sizeHa == null) ? '' : ' • ${f.sizeHa!.toStringAsFixed(2)} ha';
                 return ImageFeatureCard(
-                  assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
+                  imageUrl: 'https://images.unsplash.com/photo-1581001808603-9d8f3ec200bc?w=800&q=80',
                   title: f.name,
                   subtitle: '$location • ${f.crop}$sizeText',
                   trailing: PopupMenuButton<String>(

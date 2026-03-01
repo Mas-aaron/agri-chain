@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/rover_model.dart';
 import '../providers/rover_provider.dart';
 import '../widgets/connection_card.dart';
+import 'backend_map_screen.dart';
 import 'gps_screen.dart';
 
 class RoverConnectionScreen extends StatefulWidget {
@@ -18,16 +19,13 @@ class RoverConnectionScreen extends StatefulWidget {
 }
 
 class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
-  final TextEditingController _ipController = TextEditingController();
   List<BluetoothDevice> _bluetoothDevices = [];
   bool _isScanning = false;
-  int _selectedIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _checkPermissions();
-    _loadSavedIP();
   }
 
   Future<void> _checkPermissions() async {
@@ -38,11 +36,6 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
       Permission.bluetoothConnect,
       Permission.nearbyWifiDevices,
     ].request();
-  }
-
-  Future<void> _loadSavedIP() async {
-    final provider = Provider.of<RoverProvider>(context, listen: false);
-    _ipController.text = provider.wifiIP;
   }
 
   Future<void> _scanBluetooth() async {
@@ -56,7 +49,6 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
 
   @override
   void dispose() {
-    _ipController.dispose();
     super.dispose();
   }
 
@@ -70,10 +62,7 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
         elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: Colors.white24,
-            height: 1,
-          ),
+          child: Container(color: Colors.white24, height: 1),
         ),
       ),
       body: Container(
@@ -91,54 +80,10 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
           child: Column(
             children: [
               if (provider.isConnected) _buildConnectedCard(provider),
-              Container(
-                margin: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Row(
-                  children: [
-                    _buildTabButton('WiFi', 0),
-                    _buildTabButton('Bluetooth', 1),
-                  ],
-                ),
-              ),
               Expanded(
-                child: IndexedStack(
-                  index: _selectedIndex,
-                  children: [
-                    _buildWiFiTab(provider),
-                    _buildBluetoothTab(provider),
-                  ],
-                ),
+                child: _buildBluetoothTab(provider),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabButton(String text, int index) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedIndex = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: _selectedIndex == index
-                ? Theme.of(context).colorScheme.primary
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _selectedIndex == index ? Colors.white : Colors.grey,
-              fontWeight: FontWeight.bold,
-            ),
           ),
         ),
       ),
@@ -189,89 +134,6 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
     );
   }
 
-  Widget _buildWiFiTab(RoverProvider provider) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          ConnectionCard(
-            icon: Icons.wifi,
-            title: 'WiFi Connection',
-            subtitle: 'Connect to ESP32 rover access point',
-            children: [
-              TextField(
-                controller: _ipController,
-                decoration: InputDecoration(
-                  labelText: 'IP Address',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  prefixIcon: const Icon(Icons.router),
-                  suffixText: ':80',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: provider.isConnecting
-                      ? null
-                      : () async {
-                          provider.setWifiIP(_ipController.text);
-                          final connected = await provider.connectWiFi();
-
-                          if (!mounted) return;
-                          if (connected) {
-                            _showSuccessDialog('WiFi Connected');
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const RoverControlScreen(),
-                              ),
-                            );
-                          } else {
-                            _showErrorDialog('Connection Failed');
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: provider.isConnecting
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Text(
-                          'Connect via WiFi',
-                          style: TextStyle(fontSize: 16),
-                        ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ConnectionCard(
-            icon: Icons.info_outline,
-            title: 'Connection Steps',
-            subtitle: 'How to connect via WiFi',
-            children: [
-              _buildStep(1, 'Connect phone to rover WiFi network'),
-              _buildStep(2, 'Enter IP (default: 192.168.4.1)'),
-              _buildStep(3, 'Tap "Connect via WiFi"'),
-              _buildStep(4, 'Wait for connection confirmation'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildBluetoothTab(RoverProvider provider) {
     return SingleChildScrollView(
@@ -330,8 +192,9 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
                     onTap: provider.isConnecting
                         ? null
                         : () async {
-                            final connected =
-                                await provider.connectBluetooth(device);
+                            final connected = await provider.connectBluetooth(
+                              device,
+                            );
                             if (!mounted) return;
                             if (connected) {
                               _showSuccessDialog('Bluetooth Connected');
@@ -342,7 +205,11 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
                                 ),
                               );
                             } else {
-                              _showErrorDialog('Connection Failed');
+                              _showErrorDialog(
+                                provider.connectionMessage.isNotEmpty
+                                    ? provider.connectionMessage
+                                    : 'Connection Failed',
+                              );
                             }
                           },
                   );
@@ -392,12 +259,7 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 14),
-            ),
-          ),
+          Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
         ],
       ),
     );
@@ -478,8 +340,6 @@ class _RoverControlScreenState extends State<RoverControlScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<RoverProvider>(context, listen: false);
       setState(() => _currentSpeed = provider.status.speed);
-      // Start GPS data polling
-      provider.startGPSPolling();
     });
   }
 
@@ -502,6 +362,18 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.map),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const BackendMapScreen(
+                  baseUrl: 'http://101.44.10.153:8000',
+                  deviceId: 'rover-01',
+                ),
+              ),
+            ),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(
               context,
@@ -519,10 +391,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.grey.shade50,
-              Colors.white,
-            ],
+            colors: [Colors.grey.shade50, Colors.white],
           ),
         ),
         child: FadeTransition(
@@ -545,8 +414,6 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                           _buildRotationControls(provider),
                           const SizedBox(height: 30),
                           _buildSpeedControl(provider),
-                          const SizedBox(height: 30),
-                          _buildGPSDisplay(provider),
                           const SizedBox(height: 30),
                           _buildSoilSamplingControl(provider),
                           const SizedBox(height: 30),
@@ -571,8 +438,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       color: provider.isConnected
           ? provider.status.isMoving
-              ? Colors.green
-              : Theme.of(context).colorScheme.primary
+                ? Colors.green
+                : Theme.of(context).colorScheme.primary
           : Colors.red,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -582,8 +449,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
               Icon(
                 provider.isConnected
                     ? provider.status.isMoving
-                        ? Icons.directions_run
-                        : Icons.check_circle
+                          ? Icons.directions_run
+                          : Icons.check_circle
                     : Icons.error,
                 color: Colors.white,
                 size: 20,
@@ -592,8 +459,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
               Text(
                 provider.isConnected
                     ? provider.status.isMoving
-                        ? 'MOVING'
-                        : 'CONNECTED'
+                          ? 'MOVING'
+                          : 'CONNECTED'
                     : 'DISCONNECTED',
                 style: const TextStyle(
                   color: Colors.white,
@@ -604,8 +471,11 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           ),
           Row(
             children: [
-              const Icon(Icons.battery_charging_full,
-                  color: Colors.white, size: 20),
+              const Icon(
+                Icons.battery_charging_full,
+                color: Colors.white,
+                size: 20,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${provider.status.battery}%',
@@ -628,7 +498,11 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildInfoItem(Icons.speed, 'Speed', provider.status.speed.toString()),
+            _buildInfoItem(
+              Icons.speed,
+              'Speed',
+              provider.status.speed.toString(),
+            ),
             _buildInfoItem(
               Icons.timer,
               'Uptime',
@@ -652,17 +526,11 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
       ],
     );
@@ -773,11 +641,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                 color: Colors.red.shade100,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.stop,
-                color: Colors.red,
-                size: 40,
-              ),
+              child: const Icon(Icons.stop, color: Colors.red, size: 40),
             ),
             const SizedBox(width: 20),
             _ControlButton(
@@ -901,7 +765,10 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.blue,
                   borderRadius: BorderRadius.circular(20),
@@ -936,17 +803,11 @@ class _RoverControlScreenState extends State<RoverControlScreen>
             children: [
               Text(
                 'Slow',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.blue.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.blue.shade600),
               ),
               Text(
                 'Maximum',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.blue.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.blue.shade600),
               ),
             ],
           ),
@@ -957,7 +818,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
 
   Widget _buildGPSDisplay(RoverProvider provider) {
     final gps = provider.gpsData;
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -996,7 +857,10 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: gps.isValid ? Colors.green : Colors.red,
                       borderRadius: BorderRadius.circular(12),
@@ -1028,10 +892,19 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           const SizedBox(height: 12),
           if (gps.isValid) ...[
             _buildGPSInfoRow('Latitude', '${gps.latitude.toStringAsFixed(6)}°'),
-            _buildGPSInfoRow('Longitude', '${gps.longitude.toStringAsFixed(6)}°'),
-            _buildGPSInfoRow('Altitude', '${gps.altitude.toStringAsFixed(2)} m'),
+            _buildGPSInfoRow(
+              'Longitude',
+              '${gps.longitude.toStringAsFixed(6)}°',
+            ),
+            _buildGPSInfoRow(
+              'Altitude',
+              '${gps.altitude.toStringAsFixed(2)} m',
+            ),
             _buildGPSInfoRow('Speed', gps.speedKmh),
-            _buildGPSInfoRow('Course', '${gps.course.toStringAsFixed(1)}° ${gps.courseString}'),
+            _buildGPSInfoRow(
+              'Course',
+              '${gps.course.toStringAsFixed(1)}° ${gps.courseString}',
+            ),
             _buildGPSInfoRow('Satellites', '${gps.satellites}'),
             _buildGPSInfoRow('HDOP', '${gps.hdop.toStringAsFixed(2)}'),
           ] else ...[
@@ -1047,10 +920,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                   const SizedBox(width: 8),
                   Text(
                     'GPS data not available. Searching for satellites...',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                   ),
                 ],
               ),
@@ -1069,10 +939,7 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.orange.shade700,
-            ),
+            style: TextStyle(fontSize: 13, color: Colors.orange.shade700),
           ),
           Text(
             value,
@@ -1181,10 +1048,10 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              
+
               // Start soil sampling
               final success = await provider.sampleSoil();
-              
+
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1193,16 +1060,13 @@ class _RoverControlScreenState extends State<RoverControlScreen>
                           ? '🌱 Soil sampling started'
                           : '❌ Sampling failed',
                     ),
-                    backgroundColor:
-                        success ? Colors.green : Colors.red,
+                    backgroundColor: success ? Colors.green : Colors.red,
                     duration: const Duration(seconds: 2),
                   ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
             child: const Text(
               'Start Sampling',
               style: TextStyle(color: Colors.white),
@@ -1249,13 +1113,8 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   }
 
   Widget _buildConnectionInfo(RoverProvider provider) {
-    final icon = provider.connectionType == ConnectionType.wifi
-        ? Icons.wifi
-        : Icons.bluetooth;
-
-    final label = provider.connectionType == ConnectionType.wifi
-        ? provider.wifiIP
-        : (provider.bluetoothDevice?.name ?? 'Bluetooth');
+    final icon = Icons.bluetooth;
+    final label = provider.bluetoothDevice?.name ?? 'Bluetooth';
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -1272,20 +1131,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
               const SizedBox(width: 4),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             'Source: ${provider.status.source}',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
         ],
       ),
@@ -1391,20 +1244,17 @@ class RoverSettingsScreen extends StatefulWidget {
 }
 
 class _RoverSettingsScreenState extends State<RoverSettingsScreen> {
-  late TextEditingController _ipController;
   int _speedValue = 255;
 
   @override
   void initState() {
     super.initState();
     final provider = Provider.of<RoverProvider>(context, listen: false);
-    _ipController = TextEditingController(text: provider.wifiIP);
     _speedValue = provider.status.speed;
   }
 
   @override
   void dispose() {
-    _ipController.dispose();
     super.dispose();
   }
 
@@ -1413,83 +1263,48 @@ class _RoverSettingsScreenState extends State<RoverSettingsScreen> {
     final provider = Provider.of<RoverProvider>(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rover Settings'),
-      ),
+      appBar: AppBar(title: const Text('Rover Settings')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSection(
-            'Connection Settings',
-            Icons.settings_ethernet,
-            [
-              ListTile(
-                title: const Text('WiFi IP Address'),
-                subtitle: TextField(
-                  controller: _ipController,
-                  decoration: const InputDecoration(hintText: '192.168.4.1'),
-                ),
-                trailing: ElevatedButton(
-                  onPressed: () {
-                    provider.setWifiIP(_ipController.text);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('IP Address Saved')),
-                    );
-                  },
-                  child: const Text('Save'),
-                ),
+          _buildSection('Control Settings', Icons.tune, [
+            ListTile(
+              title: const Text('Default Speed'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  Text('Speed: $_speedValue'),
+                  Slider(
+                    value: _speedValue.toDouble(),
+                    min: 0,
+                    max: 255,
+                    divisions: 255,
+                    onChanged: (value) {
+                      setState(() {
+                        _speedValue = value.toInt();
+                      });
+                    },
+                    onChangeEnd: (value) {
+                      provider.setSpeed(value.toInt());
+                    },
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ]),
           const SizedBox(height: 16),
-          _buildSection(
-            'Control Settings',
-            Icons.tune,
-            [
-              ListTile(
-                title: const Text('Default Speed'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-                    Text('Speed: $_speedValue'),
-                    Slider(
-                      value: _speedValue.toDouble(),
-                      min: 0,
-                      max: 255,
-                      divisions: 255,
-                      onChanged: (value) {
-                        setState(() {
-                          _speedValue = value.toInt();
-                        });
-                      },
-                      onChangeEnd: (value) {
-                        provider.setSpeed(value.toInt());
-                      },
-                    ),
-                  ],
-                ),
-              ),
+          _buildSection('System Information', Icons.info, [
+            if (provider.info != null) ...[
+              _buildInfoRow('System', provider.info!.name),
+              _buildInfoRow('Version', provider.info!.version),
+              _buildInfoRow('Board', provider.info!.board),
+              _buildInfoRow('Driver', provider.info!.driver),
+              _buildInfoRow('Bluetooth', provider.info!.bluetooth),
             ],
-          ),
-          const SizedBox(height: 16),
-          _buildSection(
-            'System Information',
-            Icons.info,
-            [
-              if (provider.info != null) ...[
-                _buildInfoRow('System', provider.info!.name),
-                _buildInfoRow('Version', provider.info!.version),
-                _buildInfoRow('Board', provider.info!.board),
-                _buildInfoRow('Driver', provider.info!.driver),
-                _buildInfoRow('WiFi SSID', provider.info!.wifiSSID),
-                _buildInfoRow('WiFi IP', provider.info!.wifiIP),
-                _buildInfoRow('Bluetooth', provider.info!.bluetooth),
-              ],
-              _buildInfoRow('Uptime', _formatUptime(provider.status.uptime)),
-              _buildInfoRow('Clients', provider.status.clients.toString()),
-            ],
-          ),
+            _buildInfoRow('Uptime', _formatUptime(provider.status.uptime)),
+            _buildInfoRow('Clients', provider.status.clients.toString()),
+          ]),
         ],
       ),
     );
@@ -1498,9 +1313,7 @@ class _RoverSettingsScreenState extends State<RoverSettingsScreen> {
   Widget _buildSection(String title, IconData icon, List<Widget> children) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

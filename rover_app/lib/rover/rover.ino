@@ -6,9 +6,13 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <HTTPClient.h>
 #include <BluetoothSerial.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 #include <TinyGPS++.h>  // GPS library
+
 #include <ESP32Servo.h>  // Servo library for soil sampling
 
 // ============== PIN DEFINITIONS ==============
@@ -27,6 +31,12 @@
 #define GPS_TX 17  // TX pin for GPS module
 #define GPS_BAUD 9600  // Standard GPS module baud rate
 
+// NPK Sensor Pins (RS485 to TTL - Serial1 UART)
+#define NPK_RX 13      // RO (Receive Out) - Safe pin
+#define NPK_TX 14      // DI (Data In) - Safe pin
+#define NPK_DE_RE 27   // DE & RE connected together - Safe pin
+#define NPK_BAUD 4800  // NPK sensor default baud rate
+
 // ============== WIFI CONFIGURATION ==============
 const char* ssid = "ESP32_Rover";
 const char* password = "12345678";
@@ -34,6 +44,9 @@ const char* hostname = "esp32-rover";
 IPAddress localIP(192, 168, 4, 1);
 IPAddress gateway(192, 168, 4, 1);
 IPAddress subnet(255, 255, 255, 0);
+
+const char* staSsid = "MMU_Student";  // replace with your STA WiFi SSID
+const char* staPassword = "student2018";  // replace with your STA WiFi password
 
 // ============== BLUETOOTH CONFIGURATION ==============
 BluetoothSerial SerialBT;
@@ -60,6 +73,94 @@ struct {
   int dataUpdates = 0;                 // Number of position updates received
 } gpsData;
 
+unsigned long gpsLastByteTime = 0;
+unsigned long gpsLastHeartbeatTime = 0;
+
+// ============== NPK SENSOR CONFIGURATION ==============
+HardwareSerial npkSerial(1); // Serial1 for RS485 module
+
+struct {
+  float moisture = 0.0;
+  float temperature = 0.0;
+  float ec = 0.0;
+  float ph = 0.0;
+  float nitrogen = 0.0;
+  float phosphorus = 0.0;
+  float potassium = 0.0;
+  unsigned long lastReadTime = 0;
+  bool isValid = false;
+} npkData;
+
+// Modbus RTU Queries for 7-in-1 sensor
+// Standard registers: 0x0000 -> 0x0003 (Moist, Temp, EC, pH)
+const byte queryEnv[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x04, 0x44, 0x09};
+
+// Scanner revealed NPK actually starts at 0x0022 (Dec 34) on this specific clone
+// N is at 0x22, P is at 0x23, K is at 0x24 (using 0x0022)
+const byte queryNPK[] = {0x01, 0x03, 0x00, 0x22, 0x00, 0x03, 0xA5, 0xC1};
+
+unsigned long npkLastUpdate = 0;
+const unsigned long NPK_UPDATE_INTERVAL_MS = 5000; // Read sensor every 5 seconds
+int currentQueryStep = 0; // 0 = Env, 1 = NPK
+
+uint16_t modbusCrc16(const uint8_t* data, size_t len) {
+  uint16_t crc = 0xFFFF;
+  for (size_t i = 0; i < len; i++) {
+    crc ^= (uint16_t)data[i];
+    for (int j = 0; j < 8; j++) {
+      if (crc & 0x0001) {
+        crc >>= 1;
+        crc ^= 0xA001;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return crc;
+}
+
+void buildReadHoldingQuery(uint8_t slave, uint16_t startReg, uint16_t count, uint8_t* out8) {
+  out8[0] = slave;
+  out8[1] = 0x03;
+  out8[2] = (startReg >> 8) & 0xFF;
+  out8[3] = startReg & 0xFF;
+  out8[4] = (count >> 8) & 0xFF;
+  out8[5] = count & 0xFF;
+  uint16_t crc = modbusCrc16(out8, 6);
+  out8[6] = crc & 0xFF;
+  out8[7] = (crc >> 8) & 0xFF;
+}
+
+bool readModbusFrame(uint8_t* frame, size_t frameMax, size_t* outLen, uint16_t timeoutMs) {
+  *outLen = 0;
+  unsigned long start = millis();
+  while (millis() - start < timeoutMs) {
+    if (npkSerial.available()) {
+      uint8_t b = (uint8_t)npkSerial.read();
+      if (*outLen < frameMax) {
+        frame[(*outLen)++] = b;
+      }
+      if (*outLen >= 3) {
+        if (frame[0] != 0x01 || frame[1] != 0x03) {
+          continue;
+        }
+        uint8_t byteCount = frame[2];
+        size_t expected = (size_t)3 + (size_t)byteCount + 2;
+        if (expected > frameMax) {
+          return false;
+        }
+        if (*outLen >= expected) {
+          uint16_t crcCalc = modbusCrc16(frame, expected - 2);
+          uint16_t crcRx = (uint16_t)frame[expected - 2] | ((uint16_t)frame[expected - 1] << 8);
+          *outLen = expected;
+          return crcCalc == crcRx;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 // ============== SOIL SAMPLING ==============
 Servo servo1;  // Sampling arm servo
 Servo servo2;  // Sampling bucket servo
@@ -70,8 +171,59 @@ const int SAMPLE_ANGLE_MAX = 90;
 bool isSampling = false;
 unsigned long samplingStartTime = 0;
 
+// ============== PATH RECORDING & NAVIGATION ==============
+#define MAX_WAYPOINTS 100
+#define RECORDING_INTERVAL_MS 2000  // Record waypoint every 2 seconds
+#define MIN_DISTANCE_METERS 5.0     // Minimum distance between waypoints
+
+struct Waypoint {
+  double latitude;
+  double longitude;
+  double altitude;
+  unsigned long timestamp;
+  int index;
+};
+
+struct Route {
+  char name[32];
+  Waypoint waypoints[MAX_WAYPOINTS];
+  int waypointCount;
+  unsigned long createdAt;
+};
+
+// Active recording/navigation state
+bool isRecording = false;
+unsigned long lastRecordingTime = 0;
+Waypoint recordedWaypoints[MAX_WAYPOINTS];
+int recordedWaypointCount = 0;
+
+// Navigation state
+bool isNavigating = false;
+int currentRouteIndex = 0;
+int currentWaypointIndex = 0;
+Route activeRoute;
+double navigationTolerance = 10.0;  // meters
+
 // ============== WEB SERVER ==============
 WebServer server(80);
+
+// ============== AGRICHAIN BACKEND ==============
+const char* agrichainBaseUrl = "http://101.44.10.153:8000";
+const char* roverDeviceId = "rover-01";
+unsigned long lastBackendPost = 0;
+const unsigned long BACKEND_POST_INTERVAL_MS = 10000;  // Send GPS every 10 seconds
+
+// ============== MQTT ==============
+WiFiClientSecure wifiClient;
+PubSubClient mqttClient(wifiClient);
+const char* iotdaDeviceId = "69997692610343162ba3eb80_b0-cb-d8-89-db-30";  // replace with your IoTDA device ID
+const char* mqttHost = "dee43b65c8.st1.iotda-device.sa-brazil-1.myhuaweicloud.com";  // replace with your IoTDA host
+uint16_t mqttPort = 8883;
+const char* mqttUser = "69997692610343162ba3eb80_b0-cb-d8-89-db-30";  // replace with your IoTDA user
+const char* mqttPass = "a338c7811198ffdd9423b2977aab001abf8f62b9883a4c2ade69cdee50568842";  // replace with your IoTDA password
+const bool mqttTlsInsecure = true;
+unsigned long lastMqttPublish = 0;
+const unsigned long MQTT_PUBLISH_INTERVAL_MS = 1000;
 
 // ============== SYSTEM VARIABLES ==============
 // Movement state
@@ -106,10 +258,11 @@ void setup() {
   // Initialize all systems
   initPins();
   initGPS();
+  initNPKSensor();
   initServos();
-  initWiFi();
   initBluetooth();
-  initWebServer();
+  initWiFi();
+  initMQTT();
   
   // Initial state
   stopMotors();
@@ -150,6 +303,22 @@ void initGPS() {
   Serial.println(F("  └─ Listening for satellite data..."));
 }
 
+void initNPKSensor() {
+  Serial.print(F("Initializing NPK Sensor..."));
+  
+  pinMode(NPK_DE_RE, OUTPUT);
+  digitalWrite(NPK_DE_RE, LOW); // Start in receive mode
+  
+  // Some TTL to RS485 modules (MAX485 clones) have inverted logic levels on the ESP32
+  // If the standard configuration produces FF FF FF, we try inverting the RX/TX signals
+  // bool invert = false; (standard) -> change to true if it still outputs FF
+  npkSerial.begin(NPK_BAUD, SERIAL_8N1, NPK_RX, NPK_TX, false);
+  
+  Serial.println(F(" ✓"));
+  Serial.println(F("  └─ Baud Rate: 4800"));
+  Serial.println(F("  └─ RS485 DE/RE: GPIO 27"));
+}
+
 void initServos() {
   Serial.print(F("Initializing soil sampling servos..."));
   
@@ -175,17 +344,248 @@ void initServos() {
 }
 
 void initWiFi() {
-  Serial.print(F("Starting WiFi Access Point..."));
+  Serial.print(F("Connecting STA WiFi..."));
+ 
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(staSsid, staPassword);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < 15000) {
+    delay(250);
+    Serial.print('.');
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println(F(" ✓"));
+    Serial.print(F("  └─ STA IP: "));
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println(F(" ✗"));
+  }
+}
+
+void initMQTT() {
+  if (mqttTlsInsecure) {
+    wifiClient.setInsecure();
+  }
+  mqttClient.setServer(mqttHost, mqttPort);
+  mqttClient.setCallback(mqttCallback);
+}
+
+void handleMQTT() {
+  if (strlen(mqttHost) == 0) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  if (!mqttClient.connected()) {
+    ensureMqttConnected();
+  }
+  mqttClient.loop();
+
+  if (gpsData.isValid && mqttClient.connected()) {
+    if (millis() - lastMqttPublish >= MQTT_PUBLISH_INTERVAL_MS) {
+      publishGpsTelemetry();
+      lastMqttPublish = millis();
+    }
+  }
+}
+
+void ensureMqttConnected() {
+  String clientId = String(hostname) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+
+  bool ok = false;
+  if (strlen(mqttUser) > 0) {
+    ok = mqttClient.connect(clientId.c_str(), mqttUser, mqttPass);
+  } else {
+    ok = mqttClient.connect(clientId.c_str());
+  }
+  if (ok) {
+    String cmdTopic = String("$oc/devices/") + iotdaDeviceId + "/sys/commands/#";
+    mqttClient.subscribe(cmdTopic.c_str());
+  }
+}
+
+void publishGpsTelemetry() {
+  StaticJsonDocument<384> doc;
+  JsonArray services = doc.createNestedArray("services");
+  JsonObject svc = services.createNestedObject();
+  svc["service_id"] = "Rover";
+  JsonObject props = svc.createNestedObject("properties");
+  props["lat"] = gpsData.latitude;
+  props["lon"] = gpsData.longitude;
+  props["alt"] = gpsData.altitude;
+  props["speed"] = gpsData.speed;
+  props["course"] = gpsData.course;
+  props["sat"] = gpsData.satellites;
+  props["hdop"] = gpsData.hdop;
   
-  WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(localIP, gateway, subnet);
-  WiFi.softAP(ssid, password, 1, 0, 4);
+  // Attach NPK data if valid
+  if (npkData.isValid) {
+    props["nitrogen"] = npkData.nitrogen;
+    props["phosphorus"] = npkData.phosphorus;
+    props["potassium"] = npkData.potassium;
+    props["moisture"] = npkData.moisture;
+    props["temperature"] = npkData.temperature;
+    props["ec"] = npkData.ec;
+    props["ph"] = npkData.ph;
+  }
+
+  char payload[512];
+  size_t n = serializeJson(doc, payload, sizeof(payload));
+  if (n == 0) return;
+
+  String topic = String("$oc/devices/") + iotdaDeviceId + "/sys/properties/report";
+  mqttClient.publish(topic.c_str(), payload);
+}
+
+// ============== AGRICHAIN BACKEND HTTP POST ==============
+void postSensorDataToBackend() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (!gpsData.isValid) return;
+  if (millis() - lastBackendPost < BACKEND_POST_INTERVAL_MS) return;
+
+  lastBackendPost = millis();
+
+  HTTPClient http;
+  String url = String(agrichainBaseUrl) + "/sensor-data";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+
+  // Build JSON payload
+  StaticJsonDocument<384> doc;
+  doc["device_id"] = roverDeviceId;
+  doc["latitude"] = gpsData.latitude;
+  doc["longitude"] = gpsData.longitude;
+  doc["altitude"] = gpsData.altitude;
+  doc["speed"] = gpsData.speed;
+  doc["course"] = gpsData.course;
+  doc["satellites"] = gpsData.satellites;
+  doc["hdop"] = gpsData.hdop;
   
-  Serial.println(F(" ✓"));
-  Serial.println(F("  └─ SSID: ESP32_Rover"));
-  Serial.println(F("  └─ Password: 12345678"));
-  Serial.print(F("  └─ IP: "));
-  Serial.println(WiFi.softAPIP());
+  // Add NPK fields if sensor has valid reading
+  if (npkData.isValid) {
+    doc["nitrogen"] = npkData.nitrogen;
+    doc["phosphorus"] = npkData.phosphorus;
+    doc["potassium"] = npkData.potassium;
+    doc["temperature"] = npkData.temperature;
+    doc["humidity"] = npkData.moisture; // Map moisture to humidity for backend
+    doc["ph"] = npkData.ph;
+    doc["ec"] = npkData.ec;
+  }
+
+  char payload[512];
+  serializeJson(doc, payload, sizeof(payload));
+
+  int httpCode = http.POST(payload);
+
+  if (httpCode == 201) {
+    Serial.print(F("📤 Backend POST OK → Lat="));
+    Serial.print(gpsData.latitude, 6);
+    Serial.print(F(" Lon="));
+    Serial.println(gpsData.longitude, 6);
+  } else {
+    Serial.print(F("❌ Backend POST failed: "));
+    Serial.println(httpCode);
+  }
+
+  http.end();
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  if (length == 0) return;
+
+  StaticJsonDocument<2048> doc;
+  DeserializationError err = deserializeJson(doc, payload, length);
+  if (err) return;
+
+  String t(topic);
+
+  String cmdPrefix = String("$oc/devices/") + iotdaDeviceId + "/sys/commands/";
+  if (!t.startsWith(cmdPrefix)) return;
+
+  int idx = t.indexOf("request_id=");
+  String requestId = idx >= 0 ? t.substring(idx + 11) : "";
+
+  String commandName = doc.containsKey("command_name") ? doc["command_name"].as<String>() : "";
+  JsonObject paras = doc["paras"].as<JsonObject>();
+  bool handled = false;
+  int resultCode = 0;
+
+  if (commandName == "MOVE") {
+    if (paras.containsKey("command")) {
+      String cmd = paras["command"].as<String>();
+      cmd.trim();
+      cmd.toLowerCase();
+      executeCommand(cmd, "MQTT");
+      handled = true;
+    }
+  } else if (commandName == "SET_ROUTE") {
+    JsonArray waypoints = paras["waypoints"].as<JsonArray>();
+    StaticJsonDocument<3072> routeDoc;
+
+    if (waypoints.isNull() && paras.containsKey("route_json")) {
+      const char* routeJson = paras["route_json"].as<const char*>();
+      if (routeJson && strlen(routeJson) > 0) {
+        DeserializationError rerr = deserializeJson(routeDoc, routeJson);
+        if (!rerr) {
+          waypoints = routeDoc["waypoints"].as<JsonArray>();
+        }
+      }
+    }
+
+    if (!waypoints.isNull()) {
+      int count = 0;
+      for (JsonVariant v : waypoints) {
+        if (count >= MAX_WAYPOINTS) break;
+        JsonObject wp = v.as<JsonObject>();
+        if (!wp.containsKey("lat") || !wp.containsKey("lon")) continue;
+        activeRoute.waypoints[count].latitude = wp["lat"].as<double>();
+        activeRoute.waypoints[count].longitude = wp["lon"].as<double>();
+        activeRoute.waypoints[count].altitude = wp.containsKey("alt") ? wp["alt"].as<double>() : 0.0;
+        activeRoute.waypoints[count].timestamp = millis();
+        activeRoute.waypoints[count].index = count;
+        count++;
+      }
+      if (count > 0) {
+        activeRoute.createdAt = millis();
+        activeRoute.waypointCount = count;
+
+        if (paras.containsKey("tolerance")) {
+          navigationTolerance = paras["tolerance"].as<double>();
+        } else if (!routeDoc.isNull() && routeDoc.containsKey("tolerance")) {
+          navigationTolerance = routeDoc["tolerance"].as<double>();
+        }
+
+        bool start = paras.containsKey("start") ? paras["start"].as<bool>() : true;
+        if (!routeDoc.isNull() && routeDoc.containsKey("start")) {
+          start = routeDoc["start"].as<bool>();
+        }
+        if (start && gpsData.isValid) {
+          isNavigating = true;
+          currentWaypointIndex = 0;
+        }
+        handled = true;
+      }
+    }
+  }
+
+  if (!handled) {
+    resultCode = 1;
+  }
+
+  if (requestId.length() > 0 && mqttClient.connected()) {
+    String respTopic = String("$oc/devices/") + iotdaDeviceId + "/sys/commands/response/request_id=" + requestId;
+    StaticJsonDocument<256> resp;
+    resp["result_code"] = resultCode;
+    resp["response_name"] = "COMMAND_RESPONSE";
+    JsonObject rparas = resp.createNestedObject("paras");
+    rparas["result"] = resultCode == 0 ? "success" : "fail";
+
+    char respPayload[256];
+    size_t rn = serializeJson(resp, respPayload, sizeof(respPayload));
+    if (rn > 0) {
+      mqttClient.publish(respTopic.c_str(), respPayload);
+    }
+  }
 }
 
 void initBluetooth() {
@@ -207,6 +607,7 @@ void initWebServer() {
   // Status endpoints
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/info", HTTP_GET, handleInfo);
+  server.on("/api/npk", HTTP_GET, handleNPKData);
   
   // Movement endpoints (full words)
   server.on("/api/forward", HTTP_GET, handleForward);
@@ -240,6 +641,17 @@ void initWebServer() {
   server.on("/api/sample/soil", HTTP_GET, handleSoilSample);
   server.on("/sample", HTTP_GET, handleSoilSample);  // Shortcut
   
+  // Path recording endpoints
+  server.on("/api/recording/start", HTTP_GET, handleRecordingStart);
+  server.on("/api/recording/stop", HTTP_GET, handleRecordingStop);
+  server.on("/api/recording/data", HTTP_GET, handleRecordingData);
+  server.on("/api/recording/save", HTTP_POST, handleSaveRoute);
+  
+  // Navigation endpoints
+  server.on("/api/navigation/start", HTTP_GET, handleNavigationStart);
+  server.on("/api/navigation/stop", HTTP_GET, handleNavigationStop);
+  server.on("/api/navigation/status", HTTP_GET, handleNavigationStatus);
+  
   server.begin();
   Serial.println(F(" ✓"));
   Serial.println(F("  └─ URL: http://192.168.4.1"));
@@ -247,15 +659,27 @@ void initWebServer() {
 
 // ============== MAIN LOOP ==============
 void loop() {
-  server.handleClient();      // Handle web requests
   handleBluetooth();          // Handle Bluetooth commands
   updateGPS();                // Read GPS data
+  updateNPKSensor();          // Read NPK soil sensor
+  handleMQTT();               // Huawei IoT MQTT
+  postSensorDataToBackend();  // AgriChain backend HTTP POST
   updateSystemStatus();       // Update system status
   runHeartbeat();             // LED indicator
   
   // Handle soil sampling if in progress
   if (isSampling) {
     executeSoilSampling();
+  }
+  
+  // Handle path recording
+  if (isRecording && gpsData.isValid) {
+    recordPathWaypoint();
+  }
+  
+  // Handle autonomous navigation
+  if (isNavigating) {
+    executeAutonomousNavigation();
   }
   
   delay(10);  // Small delay for stability
@@ -285,10 +709,11 @@ void handleStatus() {
 }
 
 void handleInfo() {
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<1024> doc;
   
   doc["name"] = "ESP32 Rover Control System";
   doc["version"] = "2.0.0";
+  doc["build"] = "with_recording_endpoints";
   doc["board"] = "ESP32-WROOM-32D";
   doc["driver"] = "D0-D3 Motor Driver";
   doc["wifi_ssid"] = ssid;
@@ -299,6 +724,7 @@ void handleInfo() {
   JsonArray endpoints = doc.createNestedArray("endpoints");
   endpoints.add("GET /api/status");
   endpoints.add("GET /api/info");
+  endpoints.add("GET /api/npk");
   endpoints.add("GET /api/gps/data");
   endpoints.add("GET /api/forward");
   endpoints.add("GET /api/backward");
@@ -316,6 +742,13 @@ void handleInfo() {
   endpoints.add("GET /rr (shortcut rotate-right)");
   endpoints.add("GET /s (shortcut stop)");
   endpoints.add("GET /gps (shortcut for GPS data)");
+  endpoints.add("GET /api/recording/start");
+  endpoints.add("GET /api/recording/stop");
+  endpoints.add("GET /api/recording/data");
+  endpoints.add("POST /api/recording/save?name=<routeName>");
+  endpoints.add("GET /api/navigation/start");
+  endpoints.add("GET /api/navigation/stop");
+  endpoints.add("GET /api/navigation/status");
   
   String response;
   serializeJson(doc, response);
@@ -382,6 +815,22 @@ void handleGPS() {
   }
 }
 
+void handleNPKData() {
+  String response = "{";
+  response += "\"moisture\":" + String(npkData.moisture, 1) + ",";
+  response += "\"temperature\":" + String(npkData.temperature, 1) + ",";
+  response += "\"ec\":" + String(npkData.ec, 0) + ",";
+  response += "\"ph\":" + String(npkData.ph, 1) + ",";
+  response += "\"nitrogen\":" + String(npkData.nitrogen, 0) + ",";
+  response += "\"phosphorus\":" + String(npkData.phosphorus, 0) + ",";
+  response += "\"potassium\":" + String(npkData.potassium, 0) + ",";
+  response += "\"timestamp\":" + String((unsigned long)millis()) + ",";
+  response += "\"is_valid\":" + String(npkData.isValid ? "true" : "false");
+  response += "}";
+  
+  server.send(200, "application/json", response);
+}
+
 void handleSoilSample() {
   if (isSampling) {
     server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Sampling already in progress\"}");
@@ -398,6 +847,162 @@ void handleSoilSample() {
   server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Soil sampling started\"}");
   
   // Execute sampling sequence (non-blocking, handled in loop)
+}
+
+// ============== PATH RECORDING HANDLERS ==============
+void handleRecordingStart() {
+  if (isRecording) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Recording already in progress\"}");
+    return;
+  }
+  
+  if (!gpsData.isValid) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No GPS fix, cannot start recording\"}");
+    return;
+  }
+  
+  isRecording = true;
+  recordedWaypointCount = 0;
+  lastRecordingTime = millis();
+  
+  Serial.println(F("\n📍 PATH RECORDING STARTED"));
+  Serial.println(F("═════════════════════════"));
+  
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Path recording started\"}");
+}
+
+void handleRecordingStop() {
+  if (!isRecording) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No recording in progress\"}");
+    return;
+  }
+  
+  isRecording = false;
+  
+  Serial.print(F("[✓] Recording stopped. Waypoints captured: "));
+  Serial.println(recordedWaypointCount);
+  Serial.println(F("═════════════════════════\n"));
+  
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Path recording stopped\",\"waypoints\":" + String(recordedWaypointCount) + "}");
+}
+
+void handleRecordingData() {
+  // Return all recorded waypoints as JSON array
+  String response = "{\"recording\":" + String(isRecording ? "true" : "false") + ",\"waypoints\":[";
+  
+  for (int i = 0; i < recordedWaypointCount; i++) {
+    if (i > 0) response += ",";
+    response += "{";
+    response += "\"index\":" + String(i) + ",";
+    response += "\"latitude\":" + String(recordedWaypoints[i].latitude, 8) + ",";
+    response += "\"longitude\":" + String(recordedWaypoints[i].longitude, 8) + ",";
+    response += "\"altitude\":" + String(recordedWaypoints[i].altitude, 2) + ",";
+    response += "\"timestamp\":" + String(recordedWaypoints[i].timestamp);
+    response += "}";
+  }
+  
+  response += "],\"total\":" + String(recordedWaypointCount) + "}";
+  server.send(200, "application/json", response);
+}
+
+void handleSaveRoute() {
+  if (recordedWaypointCount == 0) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No waypoints to save\"}");
+    return;
+  }
+  
+  // Get route name from POST data
+  String routeName = "Route_" + String(millis() / 1000);
+  if (server.hasArg("name")) {
+    routeName = server.arg("name");
+  }
+  
+  // Save route to memory
+  activeRoute.createdAt = millis();
+  activeRoute.waypointCount = recordedWaypointCount;
+  strcpy(activeRoute.name, routeName.c_str());
+  
+  for (int i = 0; i < recordedWaypointCount; i++) {
+    activeRoute.waypoints[i] = recordedWaypoints[i];
+  }
+  
+  // Clear recording for next session
+  recordedWaypointCount = 0;
+  
+  Serial.print(F("✅ Route saved: "));
+  Serial.print(routeName);
+  Serial.print(F(" with "));
+  Serial.print(activeRoute.waypointCount);
+  Serial.println(F(" waypoints"));
+  
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Route saved\",\"name\":\"" + routeName + "\",\"waypoints\":" + String(activeRoute.waypointCount) + "}");
+}
+
+// ============== NAVIGATION HANDLERS ==============
+void handleNavigationStart() {
+  if (isNavigating) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"Navigation already in progress\"}");
+    return;
+  }
+  
+  if (activeRoute.waypointCount == 0) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No route loaded\"}");
+    return;
+  }
+  
+  if (!gpsData.isValid) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No GPS fix, cannot start navigation\"}");
+    return;
+  }
+  
+  isNavigating = true;
+  currentWaypointIndex = 0;
+  
+  Serial.println(F("\n🗺️  AUTONOMOUS NAVIGATION STARTED"));
+  Serial.println(F("═════════════════════════"));
+  Serial.print(F("Route: "));
+  Serial.print(activeRoute.name);
+  Serial.print(F(" | Waypoints: "));
+  Serial.println(activeRoute.waypointCount);
+  
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Navigation started\"}");
+}
+
+void handleNavigationStop() {
+  if (!isNavigating) {
+    server.send(400, "application/json", "{\"status\":\"error\",\"message\":\"No navigation in progress\"}");
+    return;
+  }
+  
+  isNavigating = false;
+  stopMotors();
+  
+  Serial.println(F("[✓] Navigation stopped"));
+  Serial.println(F("═════════════════════════\n"));
+  
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Navigation stopped\"}");
+}
+
+void handleNavigationStatus() {
+  String response = "{";
+  response += "\"navigating\":" + String(isNavigating ? "true" : "false") + ",";
+  response += "\"currentWaypoint\":" + String(currentWaypointIndex) + ",";
+  response += "\"totalWaypoints\":" + String(activeRoute.waypointCount) + ",";
+  response += "\"routeName\":\"" + String(activeRoute.name) + "\"";
+  
+  if (isNavigating && currentWaypointIndex < activeRoute.waypointCount) {
+    Waypoint target = activeRoute.waypoints[currentWaypointIndex];
+    double distance = calculateDistance(gpsData.latitude, gpsData.longitude, target.latitude, target.longitude);
+    
+    response += ",\"targetLat\":" + String(target.latitude, 8);
+    response += ",\"targetLon\":" + String(target.longitude, 8);
+    response += ",\"distanceToTarget\":" + String(distance, 2);
+    response += ",\"targetReached\":" + String(distance < navigationTolerance ? "true" : "false");
+    response += ",\"bearing\":" + String(calculateBearing(gpsData.latitude, gpsData.longitude, target.latitude, target.longitude), 2);
+  }
+  
+  response += "}";
+  server.send(200, "application/json", response);
 }
 
 // ============== BLUETOOTH HANDLING ==============
@@ -467,6 +1072,46 @@ void processBluetoothCommand(String cmd) {
       samplingStartTime = millis();
       SerialBT.println("✓ Soil sampling started");
     }
+  }
+
+  else if (cmd == "npkscan") {
+    SerialBT.println("NPK scan start");
+    uint8_t q[8];
+    uint8_t f[64];
+    size_t flen = 0;
+
+    for (uint16_t r = 0x0010; r <= 0x0030; r++) {
+      while (npkSerial.available()) npkSerial.read();
+      buildReadHoldingQuery(0x01, r, 3, q);
+
+      digitalWrite(NPK_DE_RE, HIGH);
+      delay(10);
+      npkSerial.write(q, 8);
+      npkSerial.flush();
+      delay(4);
+      digitalWrite(NPK_DE_RE, LOW);
+      delay(5);
+
+      bool ok = readModbusFrame(f, sizeof(f), &flen, 350);
+      if (ok && flen >= 11 && f[2] == 0x06) {
+        uint16_t v1 = ((uint16_t)f[3] << 8) | f[4];
+        uint16_t v2 = ((uint16_t)f[5] << 8) | f[6];
+        uint16_t v3 = ((uint16_t)f[7] << 8) | f[8];
+        SerialBT.print("reg 0x");
+        if (r < 0x1000) SerialBT.print("0");
+        if (r < 0x0100) SerialBT.print("0");
+        if (r < 0x0010) SerialBT.print("0");
+        SerialBT.print(String(r, HEX));
+        SerialBT.print(" -> ");
+        SerialBT.print(v1);
+        SerialBT.print(",");
+        SerialBT.print(v2);
+        SerialBT.print(",");
+        SerialBT.println(v3);
+      }
+      delay(30);
+    }
+    SerialBT.println("NPK scan done");
   }
   
   // Speed command
@@ -716,8 +1361,11 @@ void setSpeed(int speed) {
 // ============== GPS FUNCTIONS ==============
 void updateGPS() {
   // Read available GPS data
+  bool readAnyByte = false;
   while (gpsSerial.available() > 0) {
     char c = gpsSerial.read();
+    gpsLastByteTime = millis();
+    readAnyByte = true;
     if (gps.encode(c)) {
       // GPS data update complete
       if (gps.location.isValid()) {
@@ -765,6 +1413,119 @@ void updateGPS() {
       }
     }
   }
+
+  const unsigned long now = millis();
+  if (now - gpsLastHeartbeatTime >= 2000) {
+    gpsLastHeartbeatTime = now;
+    Serial.print(F("📍 GPS: "));
+    if (gpsLastByteTime == 0) {
+      Serial.println(F("no UART data yet"));
+    } else if (now - gpsLastByteTime > 3000) {
+      Serial.print(F("UART silent "));
+      Serial.print((now - gpsLastByteTime) / 1000);
+      Serial.println(F("s"));
+    } else if (gpsData.isValid) {
+      Serial.print(F("FIX Lat="));
+      Serial.print(gpsData.latitude, 6);
+      Serial.print(F(" Lon="));
+      Serial.print(gpsData.longitude, 6);
+      Serial.print(F(" Sats="));
+      Serial.print(gpsData.satellites);
+      Serial.print(F(" HDOP="));
+      Serial.println(gpsData.hdop, 2);
+    } else {
+      Serial.print(F("searching Sats="));
+      Serial.print(gpsData.satellites);
+      Serial.print(F(" age="));
+      if (gpsData.lastReceivedTime == 0) {
+        Serial.println(F("never"));
+      } else {
+        Serial.print((now - gpsData.lastReceivedTime) / 1000);
+        Serial.println(F("s"));
+      }
+    }
+  }
+}
+
+// ============== NPK SENSOR FUNCTIONS ==============
+void updateNPKSensor() {
+  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) {
+    return;
+  }
+  
+  // Clear any existing bytes in buffer
+  while(npkSerial.available()) npkSerial.read();
+
+  // Switch RS485 to transmit mode
+  digitalWrite(NPK_DE_RE, HIGH);
+  delay(10); // Give transceiver time to switch to TX
+  
+  uint8_t query[8];
+  if (currentQueryStep == 0) {
+    memcpy(query, queryEnv, sizeof(queryEnv));
+  } else {
+    memcpy(query, queryNPK, sizeof(queryNPK));
+  }
+  npkSerial.write(query, 8);
+  npkSerial.flush(); // Wait until all bytes are transmitted
+  
+  // Important timing: wait exactly long enough for the final bit to finish
+  delay(3); 
+  
+  // Switch back to receive mode
+  digitalWrite(NPK_DE_RE, LOW);
+  
+  // Give the bus a moment to settle down before we start reading
+  delay(5);
+  
+  uint8_t frame[64];
+  size_t frameLen = 0;
+  bool ok = readModbusFrame(frame, sizeof(frame), &frameLen, 500);
+
+  if (ok && frameLen >= 7) {
+    if (currentQueryStep == 0 && frame[2] == 0x08 && frameLen >= 13) {
+      npkData.moisture = (((uint16_t)frame[3] << 8) | frame[4]) / 10.0;
+      npkData.temperature = (((uint16_t)frame[5] << 8) | frame[6]) / 10.0;
+      npkData.ec = ((uint16_t)frame[7] << 8) | frame[8];
+      npkData.ph = (((uint16_t)frame[9] << 8) | frame[10]) / 10.0;
+
+      currentQueryStep = 1;
+      npkLastUpdate = millis() - (NPK_UPDATE_INTERVAL_MS - 400);
+      return;
+    }
+
+    if (currentQueryStep == 1 && frame[2] == 0x06 && frameLen >= 11) {
+      Serial.print(F("🔍 RAW NPK FRAME: "));
+      for (size_t i = 0; i < frameLen; i++) {
+        Serial.print(frame[i], HEX);
+        Serial.print(" ");
+      }
+      Serial.println();
+
+      npkData.nitrogen = ((uint16_t)frame[3] << 8) | frame[4];
+      npkData.phosphorus = ((uint16_t)frame[5] << 8) | frame[6];
+      npkData.potassium = ((uint16_t)frame[7] << 8) | frame[8];
+
+      npkData.isValid = true;
+      npkData.lastReadTime = millis();
+      npkLastUpdate = millis();
+      currentQueryStep = 0;
+
+      Serial.print(F("🌱 NPK Data: N=")); Serial.print(npkData.nitrogen, 0);
+      Serial.print(F(" P=")); Serial.print(npkData.phosphorus, 0);
+      Serial.print(F(" K=")); Serial.print(npkData.potassium, 0);
+      Serial.print(F(" | Moist=")); Serial.print(npkData.moisture, 1);
+      Serial.print(F("% Temp=")); Serial.print(npkData.temperature, 1);
+      Serial.print(F("C EC=")); Serial.print(npkData.ec, 0);
+      Serial.print(F(" pH=")); Serial.println(npkData.ph, 1);
+      return;
+    }
+  }
+
+  Serial.println(F("⚠️ NPK Sensor Timeout/CRC/format error."));
+  npkData.isValid = false;
+  npkLastUpdate = millis();
+  currentQueryStep = 0;
 }
 
 // ============== SYSTEM FUNCTIONS ==============
@@ -851,6 +1612,157 @@ void executeSoilSampling() {
   }
 }
 
+// ============== PATH RECORDING FUNCTIONS ==============
+void recordPathWaypoint() {
+  // Record waypoint at interval or when distance threshold exceeded
+  if (millis() - lastRecordingTime < RECORDING_INTERVAL_MS) {
+    return;
+  }
+  
+  // Check if we have space for more waypoints
+  if (recordedWaypointCount >= MAX_WAYPOINTS) {
+    Serial.println(F("⚠️  Max waypoints reached, stopping recording"));
+    isRecording = false;
+    return;
+  }
+  
+  // Check minimum distance if not first waypoint
+  if (recordedWaypointCount > 0) {
+    double distance = calculateDistance(
+      gpsData.latitude, gpsData.longitude,
+      recordedWaypoints[recordedWaypointCount - 1].latitude,
+      recordedWaypoints[recordedWaypointCount - 1].longitude
+    );
+    
+    if (distance < MIN_DISTANCE_METERS && recordedWaypointCount > 1) {
+      return;  // Too close to last waypoint, skip this one
+    }
+  }
+  
+  // Record waypoint
+  recordedWaypoints[recordedWaypointCount].latitude = gpsData.latitude;
+  recordedWaypoints[recordedWaypointCount].longitude = gpsData.longitude;
+  recordedWaypoints[recordedWaypointCount].altitude = gpsData.altitude;
+  recordedWaypoints[recordedWaypointCount].timestamp = millis();
+  recordedWaypoints[recordedWaypointCount].index = recordedWaypointCount;
+  
+  recordedWaypointCount++;
+  lastRecordingTime = millis();
+  
+  // Log progress
+  if (recordedWaypointCount % 5 == 0) {
+    Serial.print(F("📍 Waypoint #"));
+    Serial.print(recordedWaypointCount);
+    Serial.print(F(" recorded: "));
+    Serial.print(recordedWaypoints[recordedWaypointCount - 1].latitude, 6);
+    Serial.print(F(", "));
+    Serial.println(recordedWaypoints[recordedWaypointCount - 1].longitude, 6);
+  }
+}
+
+// ============== AUTONOMOUS NAVIGATION FUNCTIONS ==============
+void executeAutonomousNavigation() {
+  if (currentWaypointIndex >= activeRoute.waypointCount) {
+    // Route complete
+    isNavigating = false;
+    stopMotors();
+    
+    Serial.println(F("\n✅ DESTINATION REACHED - ROUTE COMPLETE\n"));
+    return;
+  }
+  
+  if (!gpsData.isValid) {
+    stopMotors();
+    return;  // No GPS fix, can't navigate
+  }
+  
+  Waypoint target = activeRoute.waypoints[currentWaypointIndex];
+  
+  // Calculate distance to target waypoint
+  double distance = calculateDistance(gpsData.latitude, gpsData.longitude, target.latitude, target.longitude);
+  double bearing = calculateBearing(gpsData.latitude, gpsData.longitude, target.latitude, target.longitude);
+  
+  // Check if waypoint reached
+  if (distance < navigationTolerance) {
+    stopMotors();
+    currentWaypointIndex++;
+    
+    Serial.print(F("✓ Waypoint #"));
+    Serial.print(currentWaypointIndex);
+    Serial.println(F(" reached"));
+    
+    delay(500);  // Brief pause before moving to next waypoint
+    return;
+  }
+  
+  // Navigate towards target
+  navigateTowardsBearing(bearing, distance);
+}
+
+void navigateTowardsBearing(double targetBearing, double distance) {
+  // Normalize target bearing to 0-360
+  while (targetBearing < 0) targetBearing += 360;
+  while (targetBearing >= 360) targetBearing -= 360;
+  
+  // Get current heading from GPS if available
+  double currentHeading = gpsData.course;  // 0-360 degrees
+  
+  // Calculate bearing error
+  double bearingError = targetBearing - currentHeading;
+  
+  // Normalize bearing error to -180 to +180
+  if (bearingError > 180) bearingError -= 360;
+  if (bearingError < -180) bearingError += 360;
+  
+  // Navigation control logic
+  const double HEADING_TOLERANCE = 15.0;  // degrees
+  
+  if (fabs(bearingError) > HEADING_TOLERANCE) {
+    // Need to turn towards target bearing
+    if (bearingError > 0) {
+      turnRight();  // Turn right
+    } else {
+      turnLeft();   // Turn left
+    }
+  } else {
+    // Correct heading, move forward
+    forward();
+  }
+}
+
+double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+  // Haversine formula to calculate distance between two GPS points
+  const double R = 6371000.0;  // Earth radius in meters
+  
+  double dLat = (lat2 - lat1) * PI / 180.0;
+  double dLon = (lon2 - lon1) * PI / 180.0;
+  
+  double a = sin(dLat / 2.0) * sin(dLat / 2.0) +
+             cos(lat1 * PI / 180.0) * cos(lat2 * PI / 180.0) *
+             sin(dLon / 2.0) * sin(dLon / 2.0);
+  
+  double c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
+  double distance = R * c;
+  
+  return distance;
+}
+
+double calculateBearing(double lat1, double lon1, double lat2, double lon2) {
+  // Calculate bearing from point 1 to point 2
+  double dLon = (lon2 - lon1) * PI / 180.0;
+  lat1 = lat1 * PI / 180.0;
+  lat2 = lat2 * PI / 180.0;
+  
+  double y = sin(dLon) * cos(lat2);
+  double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon);
+  double bearing = atan2(y, x) * 180.0 / PI;
+  
+  // Normalize to 0-360
+  if (bearing < 0) bearing += 360;
+  
+  return bearing;
+}
+
 // ============== UI FUNCTIONS ==============
 void printBootScreen() {
   Serial.println(F("\n\n"));
@@ -865,15 +1777,8 @@ void printSystemInfo() {
   Serial.println(F("\n✅ SYSTEM READY"));
   Serial.println(F("═══════════════════════════════════════"));
   Serial.println(F("CONTROL METHODS:"));
-  Serial.println(F("  • Web Interface: http://192.168.4.1"));
-  Serial.println(F("  • API Base: http://192.168.4.1/api/"));
   Serial.println(F("  • Bluetooth: ESP32_Rover_BT"));
   Serial.println();
-  Serial.println(F("QUICK COMMANDS:"));
-  Serial.println(F("  • /f - Forward        • /b - Backward"));
-  Serial.println(F("  • /l - Left           • /r - Right"));
-  Serial.println(F("  • /rl - Rotate Left   • /rr - Rotate Right"));
-  Serial.println(F("  • /s - Stop"));
   Serial.println(F("═══════════════════════════════════════\n"));
 }
 

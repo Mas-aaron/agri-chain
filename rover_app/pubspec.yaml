@@ -43,6 +43,8 @@ dependencies:
   connectivity_plus: ^7.0.0
   flutter_joystick: ^0.2.2
   loading_animation_widget: ^1.2.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:

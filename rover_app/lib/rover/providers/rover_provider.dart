@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
@@ -14,6 +16,17 @@ class RoverProvider extends ChangeNotifier {
   String _wifiIP = '192.168.4.1';
   BluetoothDevice? _bluetoothDevice;
   BluetoothConnection? _bluetoothConnection;
+  StreamSubscription<Uint8List>? _bluetoothInputSub;
+  String _bluetoothTextBuffer = '';
+
+  double? _btGpsLatitude;
+  double? _btGpsLongitude;
+  double? _btGpsAltitude;
+  double? _btGpsSpeedMps;
+  double? _btGpsCourse;
+  int? _btGpsSatellites;
+  double? _btGpsHdop;
+  bool? _btGpsIsValid;
 
   RoverStatus _status = RoverStatus.disconnected;
   RoverInfo? _info;
@@ -62,6 +75,18 @@ class RoverProvider extends ChangeNotifier {
   }
 
   Future<bool> connectWiFi() async {
+    if (_isConnecting) return false;
+
+    // If we're already connected via WiFi, don't disconnect/reconnect (that causes flapping).
+    if (_isConnected && _connectionType == ConnectionType.wifi) {
+      return true;
+    }
+
+    // If connected via another transport, reset first.
+    if (_isConnected) {
+      disconnect();
+    }
+
     _connectionType = ConnectionType.wifi;
     _isConnecting = true;
     _connectionMessage = 'Connecting via WiFi...';
@@ -81,6 +106,7 @@ class RoverProvider extends ChangeNotifier {
 
         await fetchSystemInfo();
         startStatusPolling();
+        unawaited(fetchGPSData());
         startGPSPolling();  // Start GPS polling on WiFi connect
 
         _isConnecting = false;
@@ -122,6 +148,27 @@ class RoverProvider extends ChangeNotifier {
   }
 
   Future<bool> connectBluetooth(BluetoothDevice device) async {
+    if (_isConnecting) return false;
+
+    if (_isConnected) {
+      disconnect();
+    }
+
+    // Ensure permissions + adapter enabled before connecting (Android 12+).
+    try {
+      final connectStatus = await Permission.bluetoothConnect.status;
+      if (!connectStatus.isGranted) {
+        final requested = await Permission.bluetoothConnect.request();
+        if (!requested.isGranted) {
+          _connectionMessage = 'Bluetooth permission denied';
+          notifyListeners();
+          return false;
+        }
+      }
+
+      await FlutterBluetoothSerial.instance.requestEnable();
+    } catch (_) {}
+
     _connectionType = ConnectionType.bluetooth;
     _bluetoothDevice = device;
     _isConnecting = true;
@@ -129,50 +176,223 @@ class RoverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _bluetoothConnection = await BluetoothConnection.toAddress(device.address);
+      // Some devices/ROMs can take longer to complete the SPP socket connect.
+      // Retry once after a longer timeout before failing.
+      try {
+        _bluetoothConnection = await BluetoothConnection.toAddress(device.address)
+            .timeout(const Duration(seconds: 20));
+      } on TimeoutException {
+        try {
+          _bluetoothConnection?.dispose();
+        } catch (_) {}
+        _bluetoothConnection = null;
+
+        _bluetoothConnection = await BluetoothConnection.toAddress(device.address)
+            .timeout(const Duration(seconds: 20));
+      }
 
       _isConnected = true;
       _connectionMessage = 'Connected via Bluetooth';
 
-      _bluetoothConnection!.input!.listen((data) {
+      _bluetoothInputSub?.cancel();
+      _bluetoothInputSub = _bluetoothConnection!.input!.listen((data) {
         final response = utf8.decode(data, allowMalformed: true);
         processBluetoothResponse(response);
       });
 
       sendBluetoothCommand('status');
+      unawaited(fetchGPSData());
+      startGPSPolling();
 
       _isConnecting = false;
       notifyListeners();
       return true;
-    } catch (_) {
-      _isConnected = false;
-      _connectionMessage = 'Bluetooth connection failed';
-      _connectionType = ConnectionType.none;
+    } on TimeoutException {
+      // If the connection attempt hangs, make sure we cleanup so retries work.
+      disconnect();
+      _connectionMessage =
+          'Bluetooth connection failed: timeout (make sure the rover is paired in Android Bluetooth settings and not already connected to another phone)';
+      _isConnecting = false;
+      notifyListeners();
+      return false;
+    } on PlatformException catch (e) {
+      // Android socket errors are often surfaced as PlatformException.
+      disconnect();
+      _connectionMessage = _friendlyBluetoothConnectError(e);
+      _isConnecting = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      // Cleanup any partially-open connection/subscriptions.
+      disconnect();
+      _connectionMessage = _friendlyBluetoothConnectError(e);
       _isConnecting = false;
       notifyListeners();
       return false;
     }
   }
 
-  void processBluetoothResponse(String response) {
-    final trimmed = response.trim();
-    if (!trimmed.startsWith('STATUS:')) return;
+  String _friendlyBluetoothConnectError(Object e) {
+    final msg = e.toString().toLowerCase();
 
-    try {
-      final parts = trimmed.split(':');
-      if (parts.length >= 3) {
-        final cmd = parts[1];
-        final speed = int.tryParse(parts[2]) ?? _status.speed;
-        _status = _status.copyWith(
-          command: cmd,
-          direction: cmd,
-          isMoving: cmd != 'stop' && cmd != 's',
-          speed: speed,
-          source: 'bluetooth',
-        );
+    if (msg.contains('timeout')) {
+      return 'Bluetooth connection failed: timeout. Pair the rover in Android Bluetooth settings, keep it close, and ensure it is not connected to another phone.';
+    }
+
+    if (msg.contains('read failed') ||
+        msg.contains('socket might closed') ||
+        msg.contains('socket might closed') ||
+        msg.contains('socket closed') ||
+        msg.contains('read ret: -1')) {
+      return 'Bluetooth connection failed: socket closed by Android. Fix: Unpair ESP32_Rover_BT, reboot the rover, toggle Bluetooth OFF/ON, then pair again and retry. Also ensure no other phone is connected to the rover.';
+    }
+
+    if (msg.contains('connect_error') || msg.contains('connect failed')) {
+      return 'Bluetooth connection failed: could not open SPP connection. Fix: Pair the rover first, keep it close, and ensure it is not connected to another phone.';
+    }
+
+    return 'Bluetooth connection failed. Fix: Pair the rover in Android Bluetooth settings, keep it close, and ensure it is not connected to another phone.';
+  }
+
+  void processBluetoothResponse(String response) {
+    _bluetoothTextBuffer += response;
+
+    while (true) {
+      final idx = _bluetoothTextBuffer.indexOf('\n');
+      if (idx < 0) break;
+
+      final line = _bluetoothTextBuffer.substring(0, idx).trim();
+      _bluetoothTextBuffer = _bluetoothTextBuffer.substring(idx + 1);
+      if (line.isEmpty) continue;
+      _handleBluetoothLine(line);
+    }
+  }
+
+  void _handleBluetoothLine(String line) {
+    if (line.startsWith('STATUS:')) {
+      try {
+        final parts = line.split(':');
+        if (parts.length >= 3) {
+          final cmd = parts[1];
+          final speed = int.tryParse(parts[2]) ?? _status.speed;
+          _status = _status.copyWith(
+            command: cmd,
+            direction: cmd,
+            isMoving: cmd != 'stop' && cmd != 's',
+            speed: speed,
+            source: 'bluetooth',
+          );
+          notifyListeners();
+        }
+      } catch (_) {}
+      return;
+    }
+
+    if (line.startsWith('Status:')) {
+      _btGpsIsValid = line.contains('VALID');
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('Latitude:')) {
+      _btGpsLatitude = double.tryParse(line.split(':').last.trim());
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('Longitude:')) {
+      _btGpsLongitude = double.tryParse(line.split(':').last.trim());
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('Altitude:')) {
+      final raw = line.split(':').last.trim().split(' ').first;
+      _btGpsAltitude = double.tryParse(raw);
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('Speed:')) {
+      final raw = line.split(':').last.trim().split(' ').first;
+      final kmh = double.tryParse(raw);
+      if (kmh != null) {
+        _btGpsSpeedMps = kmh / 3.6;
+      }
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('Course:')) {
+      final raw = line.split(':').last.trim().replaceAll('°', '').split(' ').first;
+      _btGpsCourse = double.tryParse(raw);
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('Satellites:')) {
+      _btGpsSatellites = int.tryParse(line.split(':').last.trim());
+      _updateGpsFromBtScratch();
+      return;
+    }
+    if (line.startsWith('HDOP:')) {
+      _btGpsHdop = double.tryParse(line.split(':').last.trim());
+      _updateGpsFromBtScratch();
+      return;
+    }
+
+    if (line.startsWith('Command:')) {
+      final cmd = line.split(':').last.trim();
+      _status = _status.copyWith(
+        command: cmd,
+        direction: cmd,
+        isMoving: cmd != 'stop' && cmd != 's',
+        source: 'bluetooth',
+      );
+      notifyListeners();
+      return;
+    }
+    if (line.startsWith('Direction:')) {
+      final direction = line.split(':').last.trim();
+      _status = _status.copyWith(
+        direction: direction,
+        isMoving: direction != 'none' && direction != 'stop' && direction != 's',
+        source: 'bluetooth',
+      );
+      notifyListeners();
+      return;
+    }
+    if (line.startsWith('Moving:')) {
+      final moving = line.split(':').last.trim().toUpperCase();
+      _status = _status.copyWith(
+        isMoving: moving == 'YES' || moving == 'TRUE',
+        source: 'bluetooth',
+      );
+      notifyListeners();
+      return;
+    }
+    if (line.startsWith('Battery:')) {
+      final raw = line.split(':').last.trim().replaceAll('%', '').trim();
+      final battery = int.tryParse(raw);
+      if (battery != null) {
+        _status = _status.copyWith(battery: battery, source: 'bluetooth');
         notifyListeners();
       }
-    } catch (_) {}
+      return;
+    }
+  }
+
+  void _updateGpsFromBtScratch() {
+    final lat = _btGpsLatitude;
+    final lon = _btGpsLongitude;
+    if (lat == null || lon == null) return;
+
+    _gpsData = GPSData(
+      latitude: lat,
+      longitude: lon,
+      altitude: _btGpsAltitude ?? _gpsData.altitude,
+      speed: _btGpsSpeedMps ?? _gpsData.speed,
+      course: _btGpsCourse ?? _gpsData.course,
+      satellites: _btGpsSatellites ?? _gpsData.satellites,
+      hdop: _btGpsHdop ?? _gpsData.hdop,
+      timestamp: DateTime.now(),
+      isValid: _btGpsIsValid ?? _gpsData.isValid,
+    );
+    notifyListeners();
   }
 
   void sendBluetoothCommand(String command) {
@@ -182,17 +402,29 @@ class RoverProvider extends ChangeNotifier {
   }
 
   void disconnect() {
+    _bluetoothInputSub?.cancel();
+    _bluetoothInputSub = null;
+
+    try {
+      _bluetoothConnection?.finish();
+    } catch (_) {}
     _bluetoothConnection?.dispose();
     _bluetoothConnection = null;
+    _bluetoothDevice = null;
 
     stopStatusPolling();
+    stopGPSPolling();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
 
     _isConnected = false;
     _connectionType = ConnectionType.none;
+    _isConnecting = false;
     _connectionMessage = 'Disconnected';
 
     _status = RoverStatus.disconnected;
     _info = null;
+    _gpsData = GPSData.invalid;
 
     notifyListeners();
   }
@@ -215,7 +447,7 @@ class RoverProvider extends ChangeNotifier {
 
   void startStatusPolling() {
     _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    _statusTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_connectionType == ConnectionType.wifi && _isConnected) {
         unawaited(fetchStatus());
       }
@@ -233,7 +465,7 @@ class RoverProvider extends ChangeNotifier {
     try {
       final response = await http
           .get(Uri.parse('http://$_wifiIP/api/status'))
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -243,10 +475,19 @@ class RoverProvider extends ChangeNotifier {
       }
     } catch (_) {}
 
+    // If WiFi status fails, treat as disconnected and try to reconnect.
+    if (_isConnected) {
+      _isConnected = false;
+      _connectionMessage = 'Disconnected';
+      stopStatusPolling();
+      stopGPSPolling();
+      notifyListeners();
+    }
+
     if (_reconnectTimer != null) return;
     _reconnectTimer = Timer(const Duration(seconds: 5), () {
       _reconnectTimer = null;
-      if (_isConnected) {
+      if (_connectionType == ConnectionType.wifi && !_isConnected && !_isConnecting) {
         unawaited(connectWiFi());
       }
     });
@@ -301,7 +542,7 @@ class RoverProvider extends ChangeNotifier {
       try {
         final response = await http
             .get(Uri.parse('http://$_wifiIP/api/gps/data'))
-            .timeout(const Duration(seconds: 2));
+            .timeout(const Duration(seconds: 5));
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
@@ -321,7 +562,7 @@ class RoverProvider extends ChangeNotifier {
     }
   }
 
-  void startGPSPolling({Duration interval = const Duration(seconds: 2)}) {
+  void startGPSPolling({Duration interval = const Duration(seconds: 3)}) {
     _gpsTimer?.cancel();
     _gpsTimer = Timer.periodic(interval, (_) {
       fetchGPSData();

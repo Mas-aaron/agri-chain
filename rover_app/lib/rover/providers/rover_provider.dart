@@ -19,6 +19,9 @@ class RoverProvider extends ChangeNotifier {
   StreamSubscription<Uint8List>? _bluetoothInputSub;
   String _bluetoothTextBuffer = '';
 
+  String? _activeSessionId;
+  String? _activeFarmId;
+
   double? _btGpsLatitude;
   double? _btGpsLongitude;
   double? _btGpsAltitude;
@@ -52,6 +55,9 @@ class RoverProvider extends ChangeNotifier {
   bool get isConnecting => _isConnecting;
   String get connectionMessage => _connectionMessage;
 
+  String? get activeSessionId => _activeSessionId;
+  String? get activeFarmId => _activeFarmId;
+
   RoverProvider() {
     unawaited(loadPreferences());
   }
@@ -59,6 +65,8 @@ class RoverProvider extends ChangeNotifier {
   Future<void> loadPreferences() async {
     _prefs = await SharedPreferences.getInstance();
     _wifiIP = _prefs!.getString('rover_wifi_ip') ?? '192.168.4.1';
+    _activeSessionId = _prefs!.getString('rover_session_id');
+    _activeFarmId = _prefs!.getString('rover_farm_id');
     notifyListeners();
   }
 
@@ -66,10 +74,36 @@ class RoverProvider extends ChangeNotifier {
     final prefs = _prefs ?? await SharedPreferences.getInstance();
     _prefs = prefs;
     await prefs.setString('rover_wifi_ip', _wifiIP);
+    
+    if (_activeSessionId != null) {
+      await prefs.setString('rover_session_id', _activeSessionId!);
+    } else {
+      await prefs.remove('rover_session_id');
+    }
+
+    if (_activeFarmId != null) {
+      await prefs.setString('rover_farm_id', _activeFarmId!);
+    } else {
+      await prefs.remove('rover_farm_id');
+    }
   }
 
   void setWifiIP(String ip) {
     _wifiIP = ip.trim();
+    unawaited(savePreferences());
+    notifyListeners();
+  }
+
+  void setActiveSession(String sessionId, String farmId) {
+    _activeSessionId = sessionId;
+    _activeFarmId = farmId;
+    unawaited(savePreferences());
+    notifyListeners();
+  }
+
+  void clearSession() {
+    _activeSessionId = null;
+    _activeFarmId = null;
     unawaited(savePreferences());
     notifyListeners();
   }

@@ -11,7 +11,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
-from agrichain.db.sqlite import connect
+from agrichain.db.sqlite import connect, utc_now_iso
 
 router = APIRouter(prefix="/sensor-data", tags=["iot"])
 
@@ -35,6 +35,9 @@ class SensorReading(BaseModel):
     humidity: Optional[float] = None
     ph: Optional[float] = None
     conductivity: Optional[float] = None
+    # Multi-tenant fields
+    session_id: Optional[str] = None
+    farm_id: Optional[str] = None
     # Free-form label
     label: Optional[str] = None
 
@@ -54,8 +57,20 @@ class SensorReadingResponse(BaseModel):
     humidity: Optional[float]
     ph: Optional[float]
     conductivity: Optional[float]
+    session_id: Optional[str]
+    farm_id: Optional[str]
     label: Optional[str]
     created_at: str
+
+class RoverSessionCreate(BaseModel):
+    farm_id: str
+    rover_id: str
+
+class RoverSessionResponse(BaseModel):
+    session_id: str
+    farm_id: str
+    rover_id: str
+    started_at: str
 
 
 # ── Init table ────────────────────────────────────────────────
@@ -79,16 +94,47 @@ def _init_sensor_table():
                 humidity REAL,
                 ph REAL,
                 conductivity REAL,
+                session_id TEXT REFERENCES rover_sessions(session_id),
+                farm_id TEXT,
                 label TEXT,
                 created_at TEXT NOT NULL
             )
         """)
+        # Auto-migrate: try adding new columns if they don't exist
+        try:
+            conn.execute("ALTER TABLE sensor_readings ADD COLUMN session_id TEXT REFERENCES rover_sessions(session_id)")
+            conn.execute("ALTER TABLE sensor_readings ADD COLUMN farm_id TEXT")
+        except Exception:
+            pass  # Columns already exist
 
 
 _init_sensor_table()
 
 
 # ── Endpoints ─────────────────────────────────────────────────
+@router.post("/sessions", status_code=201, response_model=RoverSessionResponse)
+async def create_session(session: RoverSessionCreate):
+    """Start a new data collection session for a specific farm."""
+    session_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    with connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO rover_sessions (session_id, farm_id, rover_id, started_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, session.farm_id, session.rover_id, now)
+        )
+    
+    return {
+        "session_id": session_id,
+        "farm_id": session.farm_id,
+        "rover_id": session.rover_id,
+        "started_at": now
+    }
+
+
 @router.post("", status_code=201)
 async def store_reading(reading: SensorReading):
     """Store a sensor + GPS reading from the rover."""
@@ -96,14 +142,31 @@ async def store_reading(reading: SensorReading):
     now = datetime.now(timezone.utc).isoformat()
 
     with connect() as conn:
+        # Auto-assign the active session if the rover didn't provide one
+        if not reading.session_id:
+            active_session = conn.execute(
+                "SELECT session_id, farm_id FROM rover_sessions WHERE rover_id = ? ORDER BY started_at DESC LIMIT 1",
+                (reading.device_id,)
+            ).fetchone()
+            if active_session:
+                reading.session_id = active_session["session_id"]
+                farm_id = active_session["farm_id"]
+
+        # Determine the target farm based on the active session
+        if reading.session_id and not farm_id:
+            # Look up farm_id from the session
+            row = conn.execute("SELECT farm_id FROM rover_sessions WHERE session_id = ?", (reading.session_id,)).fetchone()
+            if row:
+                farm_id = row["farm_id"]
+
         conn.execute("""
             INSERT INTO sensor_readings (
                 id, device_id, latitude, longitude, altitude,
                 speed, course, satellites, hdop,
                 nitrogen, phosphorus, potassium,
                 temperature, humidity, ph, conductivity,
-                label, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                session_id, farm_id, label, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             reading_id, reading.device_id,
             reading.latitude, reading.longitude, reading.altitude or 0,
@@ -112,6 +175,7 @@ async def store_reading(reading: SensorReading):
             reading.nitrogen, reading.phosphorus, reading.potassium,
             reading.temperature, reading.humidity, reading.ph,
             reading.conductivity,
+            reading.session_id, farm_id,
             reading.label, now,
         ))
 
@@ -120,6 +184,8 @@ async def store_reading(reading: SensorReading):
         "status": "stored",
         "latitude": reading.latitude,
         "longitude": reading.longitude,
+        "farm_id": farm_id,
+        "session_id": reading.session_id,
         "created_at": now,
     }
 
@@ -127,6 +193,7 @@ async def store_reading(reading: SensorReading):
 @router.get("")
 async def list_readings(
     device_id: Optional[str] = None,
+    farm_id: Optional[str] = None,
     limit: int = Query(default=100, le=1000),
     since: Optional[str] = None,
 ):
@@ -141,6 +208,9 @@ async def list_readings(
         if device_id:
             conditions.append("device_id = ?")
             params.append(device_id)
+        if farm_id:
+            conditions.append("farm_id = ?")
+            params.append(farm_id)
         if since:
             conditions.append("created_at >= ?")
             params.append(since)
@@ -158,6 +228,7 @@ async def list_readings(
 @router.get("/map")
 async def get_map_data(
     device_id: Optional[str] = None,
+    farm_id: Optional[str] = None,
     limit: int = Query(default=500, le=5000),
 ):
     """
@@ -167,16 +238,23 @@ async def get_map_data(
     _init_sensor_table()
 
     with connect() as conn:
+        query = "SELECT * FROM sensor_readings"
+        params: list = []
+        conditions: list = []
+
         if device_id:
-            rows = conn.execute(
-                "SELECT * FROM sensor_readings WHERE device_id=? ORDER BY created_at ASC LIMIT ?",
-                (device_id, limit),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM sensor_readings ORDER BY created_at ASC LIMIT ?",
-                (limit,),
-            ).fetchall()
+            conditions.append("device_id = ?")
+            params.append(device_id)
+        if farm_id:
+            conditions.append("farm_id = ?")
+            params.append(farm_id)
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at ASC LIMIT ?"
+        params.append(limit)
+
+        rows = conn.execute(query, params).fetchall()
 
     features = []
     for r in rows:
@@ -209,13 +287,24 @@ async def get_map_data(
 
 
 @router.get("/stats")
-async def reading_stats(device_id: Optional[str] = None):
+async def reading_stats(
+    device_id: Optional[str] = None,
+    farm_id: Optional[str] = None
+):
     """Quick stats: total readings, latest position, bounding box."""
     _init_sensor_table()
 
     with connect() as conn:
-        where = "WHERE device_id = ?" if device_id else ""
-        params = [device_id] if device_id else []
+        conditions = []
+        params = []
+        if device_id:
+            conditions.append("device_id = ?")
+            params.append(device_id)
+        if farm_id:
+            conditions.append("farm_id = ?")
+            params.append(farm_id)
+            
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
         row = conn.execute(f"""
             SELECT

@@ -4,6 +4,8 @@ class BackendSensorPoint {
   final double latitude;
   final double longitude;
   final double? altitude;
+  final String? sessionId;
+  final String? farmId;
   final DateTime? createdAt;
 
   const BackendSensorPoint({
@@ -12,6 +14,8 @@ class BackendSensorPoint {
     required this.latitude,
     required this.longitude,
     required this.altitude,
+    this.sessionId,
+    this.farmId,
     required this.createdAt,
   });
 
@@ -40,6 +44,8 @@ class BackendSensorPoint {
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
       longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
       altitude: (json['altitude'] as num?)?.toDouble(),
+      sessionId: (json['session_id'] ?? json['sessionId'])?.toString(),
+      farmId: (json['farm_id'] ?? json['farmId'])?.toString(),
       createdAt: _parseDateTime(
         json['created_at'] ??
             json['createdAt'] ??

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/rover_model.dart';
 import '../providers/rover_provider.dart';
 import '../widgets/connection_card.dart';
+import '../widgets/rover_session_dialog.dart';
 import 'backend_map_screen.dart';
 import 'gps_screen.dart';
 
@@ -140,6 +141,50 @@ class _RoverConnectionScreenState extends State<RoverConnectionScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // Farm Session Card
+          ConnectionCard(
+            icon: Icons.agriculture,
+            title: provider.activeFarmId != null
+                ? 'Active Session: ${provider.activeFarmId}'
+                : 'No Farm Session Active',
+            subtitle: provider.activeFarmId != null
+                ? 'Readings will be tagged to this farm.'
+                : 'Start a session to tag data to a farm.',
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: Icon(provider.activeFarmId != null ? Icons.edit : Icons.add),
+                  label: Text(provider.activeFarmId != null ? 'Change Farm Session' : 'Start Farm Session'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: provider.activeFarmId != null
+                        ? Colors.green.shade600
+                        : Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const RoverSessionDialog(
+                        backendUrl: 'http://101.44.10.153:8000', // Production IP from your setup
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (provider.activeFarmId != null) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () {
+                    provider.clearSession();
+                  },
+                  child: const Text('Clear Session (Stop Tagging)'),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 16),
           ConnectionCard(
             icon: Icons.bluetooth,
             title: 'Bluetooth Connection',

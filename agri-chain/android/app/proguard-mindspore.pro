@@ -1,0 +1,6 @@
+-keep class com.google.flatbuffers.** { *; }
+-keep class mindspore.** { *; }
+-keep class com.mindspore.** { *; }
+-dontwarn com.google.flatbuffers.**
+-dontwarn mindspore.**
+-dontwarn com.mindspore.**

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:agri_chain/app_shell.dart';
+import 'package:agri_chain/screens/auth/auth_wrapper.dart';
+import 'package:agri_chain/screens/auth/login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -32,7 +34,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const AppShell(),
+          pageBuilder: (_, __, ___) => const AuthWrapper(
+            authenticatedChild: AppShell(),
+            unauthenticatedChild: LoginScreen(),
+          ),
           transitionsBuilder: (_, animation, __, child) {
             final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
             return FadeTransition(opacity: curved, child: child);

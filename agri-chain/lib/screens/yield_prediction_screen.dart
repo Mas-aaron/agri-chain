@@ -14,29 +14,29 @@ class YieldPredictionScreen extends StatefulWidget {
 class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  final _regionCtrl = TextEditingController();
-  final _soilCtrl = TextEditingController();
+  final _nitrogenCtrl = TextEditingController(text: '80');
+  final _phosphorusCtrl = TextEditingController(text: '40');
+  final _potassiumCtrl = TextEditingController(text: '45');
+  final _temperatureCtrl = TextEditingController(text: '26');
+  final _humidityCtrl = TextEditingController(text: '65');
+  final _phCtrl = TextEditingController(text: '6.5');
   final _rainfallCtrl = TextEditingController(text: '650');
-  final _tempCtrl = TextEditingController(text: '26');
-  final _daysCtrl = TextEditingController(text: '90');
+  final _pesticideCtrl = TextEditingController(text: '15');
 
-  bool _fertilizer = true;
-  bool _irrigation = false;
-
-  String _weather = 'normal';
-
-  double? _predicted;
-  String? _message;
+  PredictAndTokenizeResponse? _result;
   bool _loading = false;
   String? _error;
 
   @override
   void dispose() {
-    _regionCtrl.dispose();
-    _soilCtrl.dispose();
+    _nitrogenCtrl.dispose();
+    _phosphorusCtrl.dispose();
+    _potassiumCtrl.dispose();
+    _temperatureCtrl.dispose();
+    _humidityCtrl.dispose();
+    _phCtrl.dispose();
     _rainfallCtrl.dispose();
-    _tempCtrl.dispose();
-    _daysCtrl.dispose();
+    _pesticideCtrl.dispose();
     super.dispose();
   }
 
@@ -44,11 +44,7 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
     return double.tryParse(v.trim()) ?? fallback;
   }
 
-  int _asInt(String v, {int fallback = 0}) {
-    return int.tryParse(v.trim()) ?? fallback;
-  }
-
-  Future<void> _predict() async {
+  Future<void> _predictAndTokenize() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() {
@@ -56,86 +52,32 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
       _error = null;
     });
 
-    final rainfall = _asDouble(_rainfallCtrl.text, fallback: 0);
-    final temp = _asDouble(_tempCtrl.text, fallback: 0);
-    final days = _asInt(_daysCtrl.text, fallback: 0);
-
     final req = YieldPredictionRequest(
-      region: _regionCtrl.text.trim(),
-      soilType: _soilCtrl.text.trim(),
-      rainfallMm: rainfall,
-      temperatureCelsius: temp,
-      fertilizerUsed: _fertilizer,
-      irrigationUsed: _irrigation,
-      weatherCondition: _weather,
-      daysToHarvest: days,
+      nitrogen: _asDouble(_nitrogenCtrl.text),
+      phosphorus: _asDouble(_phosphorusCtrl.text),
+      potassium: _asDouble(_potassiumCtrl.text),
+      temperature: _asDouble(_temperatureCtrl.text),
+      humidity: _asDouble(_humidityCtrl.text),
+      ph: _asDouble(_phCtrl.text),
+      rainfall: _asDouble(_rainfallCtrl.text),
+      pesticide: _asDouble(_pesticideCtrl.text),
     );
 
     try {
       final api = YieldApiService.fromBaseUrl(AppConfig.apiBaseUrl);
-      final resp = await api.predict(req);
+      final resp = await api.predictAndTokenize(req);
       if (!mounted) return;
       setState(() {
-        _predicted = resp.predictedYield;
-        _message = resp.message ?? 'Prediction from server.';
+        _result = resp;
       });
-      return;
     } catch (e) {
-      // Fallback to offline prediction.
       if (!mounted) return;
       setState(() {
-        _error = 'Server unavailable. Showing offline estimate.';
+        _error = '$e';
       });
     } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      if (mounted) setState(() => _loading = false);
     }
-
-    // Offline heuristic prediction (static) so the feature works without backend.
-    // Returns kg/ha.
-    var base = 2400.0;
-
-    // Rainfall effect: ideal ~700mm.
-    final rainDelta = (rainfall - 700.0) / 50.0;
-    base += (rainDelta.clamp(-6, 6)) * 120.0;
-
-    // Temperature effect: ideal ~26C.
-    final tDelta = (temp - 26.0);
-    base -= (tDelta.abs().clamp(0, 8)) * 90.0;
-
-    // Inputs effect.
-    if (_fertilizer) base += 420.0;
-    if (_irrigation) base += 260.0;
-
-    // Weather condition.
-    switch (_weather) {
-      case 'dry':
-        base -= 380.0;
-        break;
-      case 'wet':
-        base -= 220.0;
-        break;
-      case 'stormy':
-        base -= 520.0;
-        break;
-      default:
-        break;
-    }
-
-    // Days to harvest: shorter period = less grain fill; very long also penalized.
-    if (days < 70) base -= (70 - days) * 35.0;
-    if (days > 120) base -= (days - 120) * 20.0;
-
-    final predicted = base.clamp(300.0, 6500.0);
-
-    if (!mounted) return;
-    setState(() {
-      _predicted = predicted;
-      _message = 'Prediction generated offline (demo). Start the FastAPI server to get model-based predictions.';
-    });
   }
 
   @override
@@ -143,33 +85,35 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
     final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Yield prediction'),
-      ),
+      appBar: AppBar(title: const Text('Yield prediction')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const ImageHeroCard(
-            assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
+            imageUrl: 'https://images.unsplash.com/photo-1581001808603-9d8f3ec200bc?w=800&q=80',
             title: 'Yield forecast',
-            subtitle: 'Estimate harvest output using your seasonal field conditions.',
+            subtitle: 'Predict yield and tokenize on blockchain.',
           ),
           const SizedBox(height: 12),
+
           if (_error != null) ...[
             Card(
+              color: Colors.red.shade50,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Colors.orange),
+                    const Icon(Icons.error_outline, color: Colors.red),
                     const SizedBox(width: 10),
-                    Expanded(child: Text(_error!)),
+                    Expanded(child: Text(_error!, style: TextStyle(color: Colors.red.shade800))),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 10),
           ],
+
+          // ── Input Form ──
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -180,101 +124,52 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.agriculture_outlined, color: scheme.primary),
+                        Icon(Icons.science_outlined, color: scheme.primary),
                         const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Enter field conditions',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                        ),
+                        Text('Soil Chemistry',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Text('From soil test results (NPK + pH)', style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _regionCtrl,
-                      decoration: const InputDecoration(labelText: 'Region'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                    ),
+                    Row(children: [
+                      Expanded(child: _numField(_nitrogenCtrl, 'Nitrogen (N)', 'kg/ha')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _numField(_phosphorusCtrl, 'Phosphorus (P)', 'kg/ha')),
+                    ]),
                     const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _soilCtrl,
-                      decoration: const InputDecoration(labelText: 'Soil type (e.g. loamy, clay)'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _rainfallCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Rainfall (mm)'),
-                            validator: (v) {
-                              final d = _asDouble(v ?? '');
-                              if (d <= 0) return 'Enter rainfall';
-                              return null;
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _tempCtrl,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Temperature (°C)'),
-                            validator: (v) {
-                              final d = _asDouble(v ?? '');
-                              if (d <= 0) return 'Enter temperature';
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _daysCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Days to harvest'),
-                      validator: (v) {
-                        final d = _asInt(v ?? '');
-                        if (d <= 0) return 'Enter days';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: _weather,
-                      decoration: const InputDecoration(labelText: 'Weather condition'),
-                      items: const [
-                        DropdownMenuItem(value: 'normal', child: Text('Normal')),
-                        DropdownMenuItem(value: 'dry', child: Text('Dry')),
-                        DropdownMenuItem(value: 'wet', child: Text('Wet')),
-                        DropdownMenuItem(value: 'stormy', child: Text('Stormy')),
-                      ],
-                      onChanged: (v) => setState(() => _weather = v ?? 'normal'),
-                    ),
+                    Row(children: [
+                      Expanded(child: _numField(_potassiumCtrl, 'Potassium (K)', 'kg/ha')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _numField(_phCtrl, 'pH Level', 'pH')),
+                    ]),
+                    const SizedBox(height: 16),
+                    Row(children: [
+                      Icon(Icons.thermostat_outlined, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      Text('Weather & Environment',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                    ]),
                     const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _fertilizer,
-                      onChanged: (v) => setState(() => _fertilizer = v),
-                      title: const Text('Fertilizer used'),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _irrigation,
-                      onChanged: (v) => setState(() => _irrigation = v),
-                      title: const Text('Irrigation used'),
-                    ),
-                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(child: _numField(_temperatureCtrl, 'Temperature', '°C')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _numField(_humidityCtrl, 'Humidity', '%')),
+                    ]),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: _numField(_rainfallCtrl, 'Rainfall', 'mm')),
+                      const SizedBox(width: 12),
+                      Expanded(child: _numField(_pesticideCtrl, 'Pesticide', 'kg/ha')),
+                    ]),
+                    const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: _loading ? null : _predict,
+                        onPressed: _loading ? null : _predictAndTokenize,
                         icon: const Icon(Icons.auto_graph_outlined),
-                        label: Text(_loading ? 'Predicting…' : 'Predict yield'),
+                        label: Text(_loading ? 'Processing…' : 'Predict & Tokenize'),
                       ),
                     ),
                   ],
@@ -283,36 +178,91 @@ class _YieldPredictionScreenState extends State<YieldPredictionScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          if (_predicted != null)
+
+          // ── Prediction Result ──
+          if (_result != null) ...[
             Card(
+              color: scheme.primaryContainer.withOpacity(0.3),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.insights_outlined, color: scheme.primary),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Prediction',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
+                    Row(children: [
+                      Icon(Icons.insights_outlined, color: scheme.primary),
+                      const SizedBox(width: 10),
+                      Text('ML Prediction',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                    ]),
                     const SizedBox(height: 10),
                     Text(
-                      '${_predicted!.toStringAsFixed(0)} kg/ha',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+                      '${_result!.predictedYield.toStringAsFixed(0)} kg/ha',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: scheme.primary,
+                          ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(_message ?? '', style: Theme.of(context).textTheme.bodySmall),
+                    const SizedBox(height: 4),
+                    Text('Model: ${_result!.model}  •  Confidence: ${(_result!.confidence * 100).toStringAsFixed(0)}%',
+                        style: Theme.of(context).textTheme.bodySmall),
                   ],
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+
+            // ── Token Card ──
+            Card(
+              color: Colors.amber.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.token_outlined, color: Colors.amber.shade800),
+                      const SizedBox(width: 10),
+                      Text('Yield Token Created',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800, color: Colors.amber.shade900)),
+                    ]),
+                    const SizedBox(height: 12),
+                    _tokenRow('Token ID', _result!.token.tokenId),
+                    _tokenRow('Asset ID', _result!.token.assetId),
+                    _tokenRow('Tokens', _result!.token.tokenAmount.toStringAsFixed(0)),
+                    _tokenRow('Value', '\$${_result!.token.currentValue.toStringAsFixed(2)}'),
+                    _tokenRow('Status', _result!.token.status),
+                    const SizedBox(height: 8),
+                    Text(_result!.message, style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _numField(TextEditingController ctrl, String label, String suffix) {
+    return TextFormField(
+      controller: ctrl,
+      keyboardType: TextInputType.number,
+      decoration: InputDecoration(labelText: label, suffixText: suffix),
+      validator: (v) => _asDouble(v ?? '') <= 0 ? 'Required' : null,
+    );
+  }
+
+  Widget _tokenRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(value, style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.w700)),
         ],
       ),
     );

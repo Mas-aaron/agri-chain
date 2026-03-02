@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AlertItem {
   final String id;
@@ -71,14 +73,34 @@ class AlertItem {
         'extra': extra,
       };
 
-  static AlertItem fromJson(Map<String, dynamic> json) {
+  Map<String, dynamic> toFirestore() => {
+        'title': title,
+        'message': message,
+        'category': category,
+        'severity': severity,
+        'createdAt': Timestamp.fromDate(createdAt),
+        'fieldId': fieldId,
+        'isRead': isRead,
+        'isResolved': isResolved,
+        'imagePath': imagePath,
+        'extra': extra,
+      };
+
+  static AlertItem fromJson(Map<String, dynamic> json, {String? docId}) {
+    DateTime parsedDate = DateTime.now();
+    if (json['createdAt'] is Timestamp) {
+      parsedDate = (json['createdAt'] as Timestamp).toDate();
+    } else if (json['createdAt'] is String) {
+      parsedDate = DateTime.tryParse(json['createdAt'] as String) ?? DateTime.now();
+    }
+
     return AlertItem(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      message: json['message'] as String,
+      id: docId ?? json['id'] as String? ?? '',
+      title: json['title'] as String? ?? 'Alert',
+      message: json['message'] as String? ?? '',
       category: (json['category'] as String?) ?? 'Health',
       severity: (json['severity'] as String?) ?? 'Medium',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: parsedDate,
       fieldId: json['fieldId'] as String?,
       isRead: (json['isRead'] as bool?) ?? false,
       isResolved: (json['isResolved'] as bool?) ?? false,
@@ -108,20 +130,36 @@ class AlertsProvider extends ChangeNotifier {
 
   Future<void> ensureLoaded() async {
     if (_loaded) return;
-    await _load();
+    await load();
   }
 
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+  Future<void> load() async {
     _alerts.clear();
+    final user = FirebaseAuth.instance.currentUser;
 
-    if (raw != null && raw.isNotEmpty) {
-      final decoded = jsonDecode(raw);
-      if (decoded is List) {
-        for (final item in decoded) {
-          if (item is Map) {
-            _alerts.add(AlertItem.fromJson(item.cast<String, dynamic>()));
+    if (user != null) {
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('alerts')
+            .get();
+        for (final doc in snapshot.docs) {
+          _alerts.add(AlertItem.fromJson(doc.data(), docId: doc.id));
+        }
+      } catch (e) {
+        debugPrint('Error loading alerts from Firestore: $e');
+      }
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_storageKey);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map) {
+              _alerts.add(AlertItem.fromJson(item.cast<String, dynamic>()));
+            }
           }
         }
       }
@@ -131,7 +169,7 @@ class AlertsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _save() async {
+  Future<void> _saveLocal() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode(_alerts.map((e) => e.toJson()).toList());
     await prefs.setString(_storageKey, raw);
@@ -139,15 +177,50 @@ class AlertsProvider extends ChangeNotifier {
 
   Future<void> addAlert(AlertItem alert) async {
     await ensureLoaded();
-    _alerts.add(alert);
-    await _save();
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user != null) {
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('alerts')
+          .doc();
+      await docRef.set(alert.toFirestore());
+      _alerts.add(AlertItem(
+        id: docRef.id,
+        title: alert.title,
+        message: alert.message,
+        category: alert.category,
+        severity: alert.severity,
+        createdAt: alert.createdAt,
+        fieldId: alert.fieldId,
+        isRead: alert.isRead,
+        isResolved: alert.isResolved,
+        imagePath: alert.imagePath,
+        extra: alert.extra,
+      ));
+    } else {
+      _alerts.add(alert);
+      await _saveLocal();
+    }
     notifyListeners();
   }
 
   Future<void> removeAlert(String id) async {
     await ensureLoaded();
     _alerts.removeWhere((a) => a.id == id);
-    await _save();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('alerts')
+          .doc(id)
+          .delete();
+    } else {
+      await _saveLocal();
+    }
     notifyListeners();
   }
 
@@ -156,7 +229,18 @@ class AlertsProvider extends ChangeNotifier {
     final idx = _alerts.indexWhere((a) => a.id == id);
     if (idx < 0) return;
     _alerts[idx] = _alerts[idx].copyWith(isRead: isRead);
-    await _save();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('alerts')
+          .doc(id)
+          .update({'isRead': isRead});
+    } else {
+      await _saveLocal();
+    }
     notifyListeners();
   }
 
@@ -165,14 +249,38 @@ class AlertsProvider extends ChangeNotifier {
     final idx = _alerts.indexWhere((a) => a.id == id);
     if (idx < 0) return;
     _alerts[idx] = _alerts[idx].copyWith(isResolved: isResolved);
-    await _save();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('alerts')
+          .doc(id)
+          .update({'isResolved': isResolved});
+    } else {
+      await _saveLocal();
+    }
     notifyListeners();
   }
 
   Future<void> clearAll() async {
     await ensureLoaded();
     _alerts.clear();
-    await _save();
+    
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('alerts')
+          .get();
+      for (final doc in snapshot.docs) {
+        await doc.reference.delete();
+      }
+    } else {
+      await _saveLocal();
+    }
     notifyListeners();
   }
 }

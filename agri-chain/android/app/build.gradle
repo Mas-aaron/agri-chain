@@ -5,9 +5,6 @@ plugins {
     id "com.google.gms.google-services"
 }
 
-configurations.configureEach {
-    exclude group: 'com.google.ai.edge.litert'
-}
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
@@ -51,18 +48,11 @@ android {
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         
-        // NDK configuration
-        ndk {
-            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86_64'
-        }
+        // ndk {
+        //     // Nokia G21 is ARM-only; remove x86_64 to avoid packaging large ARM-incompatible libs
+        //     abiFilters 'armeabi-v7a', 'arm64-v8a'
+        // }
     }
-
-    // buildTypes {
-    //     release {
-    //         signingConfig signingConfigs.debug
-
-    //     }
-    // }
     
     buildTypes {
         release {
@@ -72,7 +62,8 @@ android {
             // ADD THESE THREE LINES for lightweight builds:
             minifyEnabled true
             shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-mindspore.pro'
+
         }
     }
 
@@ -88,6 +79,6 @@ flutter {
 }
 
 dependencies {
-    implementation 'org.tensorflow:tensorflow-lite:2.14.0'
-    implementation 'org.tensorflow:tensorflow-lite-select-tf-ops:2.14.0'
+    // TFLite removed — replaced by MindSpore Lite (mindspore_lite_flutter plugin)
+    // The .so files are included via plugin jniLibs/arm64-v8a/
 }

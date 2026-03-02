@@ -2,7 +2,7 @@
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:agri_chain/services/tflite_service.dart';
+import 'package:agri_chain/services/mindspore_service.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
@@ -22,8 +22,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late TFLiteService _tfliteService;
+  final MindSporeService _msService = MindSporeService();
   bool _isLoading = false;
+  CropModel _cropModel = CropModel.maize;
 
   String _formatConfidence(dynamic confidence) {
     final asDouble = confidence is num ? confidence.toDouble() : double.tryParse('$confidence');
@@ -39,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _tfliteService = Provider.of<TFLiteService>(context, listen: false);
+    // Model initializes on first scan — pre-warming here caused startup jank
   }
 
   Future<void> _pickImageFromGallery() async {
@@ -72,10 +73,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _processImage(File imageFile) async {
     setState(() => _isLoading = true);
-    
+
     try {
-      final result = await _tfliteService.predictImage(imageFile);
-      
+      // Initialize MindSpore Lite with the correct local .ms model asset
+      final modelType = _cropModel == CropModel.maize ? 'maize' : 'coffee';
+      await _msService.initialize(modelType: modelType);
+
+      // Run offline inference — no network, no downloads
+      final result = await _msService.predictImage(imageFile);
+
       if (result['success'] == true) {
         final selectedFieldId = context.read<ScanProvider>().selectedFieldId;
         try {
@@ -90,7 +96,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 : (double.tryParse('$confidence') ?? 0.0);
 
             final normalizedKey = label.replaceAll('_', ' ').trim().toLowerCase();
-            final isNonMaize = RecommendationService.isNonMaizeLabel(normalizedKey);
+            final isNonMaize = _cropModel == CropModel.maize
+                ? RecommendationService.isNonMaizeLabel(normalizedKey)
+                : false;
 
             final severity = (lower.contains('healthy') || isNonMaize)
                 ? 'Low'
@@ -132,14 +140,24 @@ class _HomeScreenState extends State<HomeScreen> {
           // Ignore alert creation failures
         }
 
+        final predictionsList = (result['predictions'] as List?)?.cast<Map<dynamic, dynamic>>() ?? [];
+        final typedPredictions = predictionsList.map((e) => e.cast<String, dynamic>()).toList();
+
+        if (typedPredictions.isEmpty) {
+          _showError('No predictions returned from the model.');
+          setState(() => _isLoading = false);
+          return;
+        }
+
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ResultsScreen(
               imageFile: imageFile,
-              predictions: result['predictions'],
-              inferenceTime: result['inferenceTime'],
+              predictions: typedPredictions,
+              inferenceTime: result['inferenceTime'] ?? 0,
               selectedFieldId: selectedFieldId,
+              cropModel: _cropModel,
             ),
           ),
         );
@@ -214,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String?>(
-                            value: effectiveSelectedFieldId,
+                            initialValue: effectiveSelectedFieldId,
                             items: items,
                             decoration: const InputDecoration(
                               labelText: 'Selected field (optional)',
@@ -227,6 +245,45 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               },
+            ),
+            const SizedBox(height: 16),
+
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.eco_outlined),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<CropModel>(
+                        initialValue: _cropModel,
+                        decoration: const InputDecoration(
+                          labelText: 'Crop model',
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: CropModel.maize,
+                            child: Text('Maize'),
+                          ),
+                          DropdownMenuItem(
+                            value: CropModel.coffee,
+                            child: Text('Coffee'),
+                          ),
+                        ],
+                        onChanged: _isLoading
+                            ? null
+                            : (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _cropModel = value;
+                                });
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -259,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeader() {
     return const ImageHeroCard(
-      assetPath: 'assets/images/corn-field-sunset.jpg',
+      imageUrl: 'https://images.unsplash.com/photo-1596701041913-7186ccf423f4?w=800&q=80',
       title: 'AI Leaf Scanner',
       subtitle: 'Detect maize diseases instantly and get treatment advice.',
     );
@@ -267,22 +324,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDiseaseInfo() {
     final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionHeader(
-          title: 'Common maize diseases',
-          subtitle: 'Know what to look for before symptoms spread.',
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
-          childAspectRatio: 1.15,
-          children: [
+
+    final isCoffee = _cropModel == CropModel.coffee;
+    final headerTitle = isCoffee ? 'Common coffee diseases' : 'Common maize diseases';
+    final headerSubtitle = isCoffee
+        ? 'Know what to look for on coffee leaves before symptoms spread.'
+        : 'Know what to look for before symptoms spread.';
+
+    final cards = isCoffee
+        ? <Widget>[
+            DiseaseCard(
+              diseaseName: 'Coffee Leaf Rust',
+              severity: 'High',
+              color: Colors.orange,
+              icon: Icons.local_fire_department_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
+            ),
+            DiseaseCard(
+              diseaseName: 'Coffee Berry Disease',
+              severity: 'High',
+              color: Colors.red,
+              icon: Icons.bug_report_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
+            ),
+            DiseaseCard(
+              diseaseName: 'Cercospora Leaf Spot',
+              severity: 'Medium',
+              color: Colors.blue,
+              icon: Icons.grain_outlined,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
+              ),
+            ),
+            DiseaseCard(
+              diseaseName: 'Healthy',
+              severity: 'None',
+              color: scheme.primary,
+              icon: Icons.check_circle_outline,
+              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Great! Keep scouting weekly and scan if you see new spots.')),
+              ),
+            ),
+          ]
+        : <Widget>[
             DiseaseCard(
               diseaseName: 'Northern Leaf Blight',
               severity: 'High',
@@ -319,7 +407,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SnackBar(content: Text('Great! Keep scouting weekly and scan if you see new spots.')),
               ),
             ),
-          ],
+          ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: headerTitle,
+          subtitle: headerSubtitle,
+        ),
+        const SizedBox(height: 16),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.15,
+          children: cards,
         ),
       ],
     );
@@ -337,14 +442,14 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Powered by TensorFlow Lite',
+                  'Powered by MindSpore Lite',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[600],
                   ),
                 ),
                 Text(
-                  'Offline AI • Fast • Accurate',
+                  'Offline AI • On-Device • Fast',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey[500],

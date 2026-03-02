@@ -40,6 +40,17 @@ def init_db() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS rover_sessions (
+                session_id TEXT PRIMARY KEY,
+                farm_id TEXT NOT NULL,
+                rover_id TEXT NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS ledger_events (
                 id TEXT PRIMARY KEY,
                 time TEXT NOT NULL,

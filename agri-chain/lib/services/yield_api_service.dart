@@ -1,63 +1,100 @@
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class YieldPredictionRequest {
-  final String region;
-  final String soilType;
-  final double rainfallMm;
-  final double temperatureCelsius;
-  final bool fertilizerUsed;
-  final bool irrigationUsed;
-  final String weatherCondition;
-  final int daysToHarvest;
+  final String farmerId;
+  final String cropType;
+  final int season;
+  final double nitrogen;
+  final double phosphorus;
+  final double potassium;
+  final double temperature;
+  final double humidity;
+  final double ph;
+  final double rainfall;
+  final double pesticide;
 
   const YieldPredictionRequest({
-    required this.region,
-    required this.soilType,
-    required this.rainfallMm,
-    required this.temperatureCelsius,
-    required this.fertilizerUsed,
-    required this.irrigationUsed,
-    required this.weatherCondition,
-    required this.daysToHarvest,
+    this.farmerId = 'FARMER_001',
+    this.cropType = 'Maize',
+    this.season = 2026,
+    required this.nitrogen,
+    required this.phosphorus,
+    required this.potassium,
+    required this.temperature,
+    required this.humidity,
+    required this.ph,
+    required this.rainfall,
+    required this.pesticide,
   });
 
   Map<String, dynamic> toJson() => {
-        'region': region,
-        'soil_type': soilType,
-        'rainfall_mm': rainfallMm,
-        'temperature_celsius': temperatureCelsius,
-        'fertilizer_used': fertilizerUsed,
-        'irrigation_used': irrigationUsed,
-        'weather_condition': weatherCondition,
-        'days_to_harvest': daysToHarvest,
+        'farmerId': farmerId,
+        'cropType': cropType,
+        'season': season,
+        'nitrogen': nitrogen,
+        'phosphorus': phosphorus,
+        'potassium': potassium,
+        'temperature': temperature,
+        'humidity': humidity,
+        'ph': ph,
+        'rainfall': rainfall,
+        'pesticide': pesticide,
       };
 }
 
-class YieldPredictionResponse {
-  final double predictedYield;
-  final double? confidence;
-  final String? message;
+class TokenInfo {
+  final String assetId;
+  final String tokenId;
+  final double tokenAmount;
+  final double currentValue;
+  final String status;
 
-  const YieldPredictionResponse({
+  const TokenInfo({
+    required this.assetId,
+    required this.tokenId,
+    required this.tokenAmount,
+    required this.currentValue,
+    required this.status,
+  });
+
+  factory TokenInfo.fromJson(Map<String, dynamic> json) {
+    return TokenInfo(
+      assetId: json['assetId'] ?? '',
+      tokenId: json['tokenId'] ?? '',
+      tokenAmount: (json['tokenAmount'] as num?)?.toDouble() ?? 0,
+      currentValue: (json['currentValue'] as num?)?.toDouble() ?? 0,
+      status: json['status'] ?? '',
+    );
+  }
+}
+
+class PredictAndTokenizeResponse {
+  final double predictedYield;
+  final String model;
+  final double confidence;
+  final TokenInfo token;
+  final String message;
+
+  const PredictAndTokenizeResponse({
     required this.predictedYield,
+    required this.model,
     required this.confidence,
+    required this.token,
     required this.message,
   });
 
-  factory YieldPredictionResponse.fromJson(Map<String, dynamic> json) {
-    final raw = json['predicted_yield'];
-    final predicted = raw is num ? raw.toDouble() : double.tryParse('$raw') ?? 0.0;
+  factory PredictAndTokenizeResponse.fromJson(Map<String, dynamic> json) {
+    final pred = json['prediction'] as Map<String, dynamic>? ?? {};
+    final tok = json['token'] as Map<String, dynamic>? ?? {};
 
-    final rawConf = json['confidence'];
-    final conf = rawConf == null ? null : (rawConf is num ? rawConf.toDouble() : double.tryParse('$rawConf'));
-
-    return YieldPredictionResponse(
-      predictedYield: predicted,
-      confidence: conf,
-      message: json['message'] as String?,
+    return PredictAndTokenizeResponse(
+      predictedYield: (pred['predicted_yield'] as num?)?.toDouble() ?? 0,
+      model: pred['model'] as String? ?? 'unknown',
+      confidence: (pred['confidence'] as num?)?.toDouble() ?? 0,
+      token: TokenInfo.fromJson(tok),
+      message: json['message'] as String? ?? '',
     );
   }
 }
@@ -67,32 +104,14 @@ class YieldApiService {
 
   const YieldApiService(this.baseUri);
 
-  Future<String?> _idToken() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-    return user.getIdToken();
-  }
-
-  Map<String, String> _headers({String? idToken}) {
-    final headers = <String, String>{
+  Map<String, String> _headers() {
+    return <String, String>{
       'Content-Type': 'application/json',
     };
-    if (idToken != null && idToken.trim().isNotEmpty) {
-      headers['Authorization'] = 'Bearer $idToken';
-    }
-    return headers;
-  }
-
-  static Uri _normalizeBaseUrl(String baseUrl) {
-    final trimmed = baseUrl.trim();
-    if (trimmed.isEmpty) {
-      throw ArgumentError('baseUrl is empty');
-    }
-    return Uri.parse(trimmed);
   }
 
   factory YieldApiService.fromBaseUrl(String baseUrl) {
-    return YieldApiService(_normalizeBaseUrl(baseUrl));
+    return YieldApiService(Uri.parse(baseUrl.trim()));
   }
 
   Uri _url(String path) {
@@ -103,12 +122,10 @@ class YieldApiService {
     );
   }
 
-  Future<YieldPredictionResponse> predict(YieldPredictionRequest request) async {
-    final idToken = await _idToken();
-    final path = idToken == null ? '/predict' : '/v1/predict';
+  Future<PredictAndTokenizeResponse> predictAndTokenize(YieldPredictionRequest request) async {
     final resp = await http.post(
-      _url(path),
-      headers: _headers(idToken: idToken),
+      _url('/predict-and-tokenize'),
+      headers: _headers(),
       body: jsonEncode(request.toJson()),
     );
 
@@ -119,17 +136,11 @@ class YieldApiService {
         if (decoded is Map && decoded['detail'] != null) {
           message = '${decoded['detail']}';
         }
-      } catch (_) {
-        // ignore
-      }
+      } catch (_) {}
       throw Exception(message);
     }
 
     final decoded = jsonDecode(resp.body);
-    if (decoded is! Map) {
-      throw Exception('Invalid response from server');
-    }
-
-    return YieldPredictionResponse.fromJson(decoded.cast<String, dynamic>());
+    return PredictAndTokenizeResponse.fromJson(decoded.cast<String, dynamic>());
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -6,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/rover_model.dart';
 import '../providers/rover_provider.dart';
 import '../widgets/connection_card.dart';
+import '../../screens/rover/field_map_screen.dart';
 
 class RoverConnectionScreen extends StatefulWidget {
   const RoverConnectionScreen({super.key});
@@ -446,6 +449,10 @@ class _RoverControlScreenState extends State<RoverControlScreen>
   late final AnimationController _animationController;
   late final Animation<double> _fadeAnimation;
 
+  static const Duration _minPressDuration = Duration(milliseconds: 200);
+  Timer? _stopTimer;
+  DateTime? _pressStartedAt;
+
   bool _isLeftPressed = false;
   bool _isRightPressed = false;
   bool _isForwardPressed = false;
@@ -471,8 +478,30 @@ class _RoverControlScreenState extends State<RoverControlScreen>
 
   @override
   void dispose() {
+    _stopTimer?.cancel();
     _animationController.dispose();
     super.dispose();
+  }
+
+  void _handlePressDown(RoverProvider provider, RoverCommand command, VoidCallback setPressedTrue) {
+    _stopTimer?.cancel();
+    _pressStartedAt = DateTime.now();
+    provider.sendCommand(command);
+    setState(setPressedTrue);
+  }
+
+  void _handlePressUp(RoverProvider provider, VoidCallback setPressedFalse) {
+    setState(setPressedFalse);
+
+    final startedAt = _pressStartedAt;
+    final elapsed = startedAt == null ? Duration.zero : DateTime.now().difference(startedAt);
+    final remaining = _minPressDuration - elapsed;
+    final delay = remaining.isNegative ? Duration.zero : remaining;
+
+    _stopTimer?.cancel();
+    _stopTimer = Timer(delay, () {
+      provider.sendCommand(RoverCommand.stop);
+    });
   }
 
   @override
@@ -484,6 +513,14 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         title: const Text('Rover Control'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.map),
+            tooltip: 'Field Map',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FieldMapScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () => Navigator.push(
@@ -700,14 +737,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           child: _ControlButton(
             icon: Icons.arrow_upward,
             label: 'FORWARD',
-            onTapDown: () {
-              provider.sendCommand(RoverCommand.forward);
-              setState(() => _isForwardPressed = true);
-            },
-            onTapUp: () {
-              provider.sendCommand(RoverCommand.stop);
-              setState(() => _isForwardPressed = false);
-            },
+            onTapDown: () => _handlePressDown(
+              provider,
+              RoverCommand.forward,
+              () => _isForwardPressed = true,
+            ),
+            onTapUp: () => _handlePressUp(
+              provider,
+              () => _isForwardPressed = false,
+            ),
             isPressed: _isForwardPressed,
             color: Colors.green,
             size: 80,
@@ -720,14 +758,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
             _ControlButton(
               icon: Icons.arrow_back,
               label: 'LEFT',
-              onTapDown: () {
-                provider.sendCommand(RoverCommand.left);
-                setState(() => _isLeftPressed = true);
-              },
-              onTapUp: () {
-                provider.sendCommand(RoverCommand.stop);
-                setState(() => _isLeftPressed = false);
-              },
+              onTapDown: () => _handlePressDown(
+                provider,
+                RoverCommand.left,
+                () => _isLeftPressed = true,
+              ),
+              onTapUp: () => _handlePressUp(
+                provider,
+                () => _isLeftPressed = false,
+              ),
               isPressed: _isLeftPressed,
               color: Colors.orange,
               size: 70,
@@ -750,14 +789,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
             _ControlButton(
               icon: Icons.arrow_forward,
               label: 'RIGHT',
-              onTapDown: () {
-                provider.sendCommand(RoverCommand.right);
-                setState(() => _isRightPressed = true);
-              },
-              onTapUp: () {
-                provider.sendCommand(RoverCommand.stop);
-                setState(() => _isRightPressed = false);
-              },
+              onTapDown: () => _handlePressDown(
+                provider,
+                RoverCommand.right,
+                () => _isRightPressed = true,
+              ),
+              onTapUp: () => _handlePressUp(
+                provider,
+                () => _isRightPressed = false,
+              ),
               isPressed: _isRightPressed,
               color: Colors.orange,
               size: 70,
@@ -769,14 +809,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
           child: _ControlButton(
             icon: Icons.arrow_downward,
             label: 'BACKWARD',
-            onTapDown: () {
-              provider.sendCommand(RoverCommand.backward);
-              setState(() => _isBackwardPressed = true);
-            },
-            onTapUp: () {
-              provider.sendCommand(RoverCommand.stop);
-              setState(() => _isBackwardPressed = false);
-            },
+            onTapDown: () => _handlePressDown(
+              provider,
+              RoverCommand.backward,
+              () => _isBackwardPressed = true,
+            ),
+            onTapUp: () => _handlePressUp(
+              provider,
+              () => _isBackwardPressed = false,
+            ),
             isPressed: _isBackwardPressed,
             color: Colors.red,
             size: 80,
@@ -793,14 +834,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         _ControlButton(
           icon: Icons.rotate_left,
           label: 'ROTATE L',
-          onTapDown: () {
-            provider.sendCommand(RoverCommand.rotateLeft);
-            setState(() => _isRotateLeftPressed = true);
-          },
-          onTapUp: () {
-            provider.sendCommand(RoverCommand.stop);
-            setState(() => _isRotateLeftPressed = false);
-          },
+          onTapDown: () => _handlePressDown(
+            provider,
+            RoverCommand.rotateLeft,
+            () => _isRotateLeftPressed = true,
+          ),
+          onTapUp: () => _handlePressUp(
+            provider,
+            () => _isRotateLeftPressed = false,
+          ),
           isPressed: _isRotateLeftPressed,
           color: Colors.purple,
           size: 100,
@@ -809,14 +851,15 @@ class _RoverControlScreenState extends State<RoverControlScreen>
         _ControlButton(
           icon: Icons.rotate_right,
           label: 'ROTATE R',
-          onTapDown: () {
-            provider.sendCommand(RoverCommand.rotateRight);
-            setState(() => _isRotateRightPressed = true);
-          },
-          onTapUp: () {
-            provider.sendCommand(RoverCommand.stop);
-            setState(() => _isRotateRightPressed = false);
-          },
+          onTapDown: () => _handlePressDown(
+            provider,
+            RoverCommand.rotateRight,
+            () => _isRotateRightPressed = true,
+          ),
+          onTapUp: () => _handlePressUp(
+            provider,
+            () => _isRotateRightPressed = false,
+          ),
           isPressed: _isRotateRightPressed,
           color: Colors.purple,
           size: 100,

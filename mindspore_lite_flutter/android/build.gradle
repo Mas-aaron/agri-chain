@@ -1,0 +1,42 @@
+group 'com.example.mindspore_lite_flutter'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.3.0'
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.example.mindspore_lite_flutter'
+    compileSdk 36
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion 21
+    }
+
+    dependencies {
+        implementation(name: 'mindspore-lite-full-1.7.0', ext: 'aar')
+        implementation 'com.google.code.gson:gson:2.10.1'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        flatDir {
+            dirs "${project(':mindspore_lite_flutter').projectDir}/libs"
+        }
+    }
+}

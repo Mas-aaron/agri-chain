@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/screens/rover/field_map_screen.dart';
 
 class FieldsTab extends StatelessWidget {
   const FieldsTab({super.key});
@@ -13,14 +14,16 @@ class FieldsTab extends StatelessWidget {
     final provider = context.watch<FieldsProvider>();
     final fields = provider.fields;
 
-    return FutureBuilder<void>(
-      future: context.read<FieldsProvider>().ensureLoaded(),
-      builder: (context, snapshot) {
-        return ListView(
-          padding: const EdgeInsets.all(16),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Fields')),
+      body: FutureBuilder<void>(
+        future: context.read<FieldsProvider>().ensureLoaded(),
+        builder: (context, snapshot) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
           children: [
             const ImageHeroCard(
-              assetPath: 'assets/images/sustainable-garden-harvesting-produce.jpg',
+              imageUrl: 'https://images.unsplash.com/photo-1595847321528-766cf018aeb5?w=800&q=80',
               title: 'Your fields',
               subtitle: 'Track each plot, monitor location, and link alerts to fields.',
             ),
@@ -52,7 +55,7 @@ class FieldsTab extends StatelessWidget {
                 final location = f.location.isEmpty ? 'Unknown location' : f.location;
                 final sizeText = (f.sizeHa == null) ? '' : ' • ${f.sizeHa!.toStringAsFixed(2)} ha';
                 return ImageFeatureCard(
-                  assetPath: 'assets/images/beautiful-shot-cornfield-with-blue-sky.jpg',
+                  imageUrl: 'https://images.unsplash.com/photo-1581001808603-9d8f3ec200bc?w=800&q=80',
                   title: f.name,
                   subtitle: '$location • ${f.crop}$sizeText',
                   trailing: PopupMenuButton<String>(
@@ -71,7 +74,7 @@ class FieldsTab extends StatelessWidget {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => _FieldDetailScreen(field: f)),
+                      MaterialPageRoute(builder: (_) => FieldDetailScreen(field: f)),
                     );
                   },
                 );
@@ -79,8 +82,9 @@ class FieldsTab extends StatelessWidget {
           ],
         );
       },
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _openEditor(BuildContext context, {FieldItem? existing}) async {
     final nameController = TextEditingController(text: existing?.name ?? '');
@@ -174,10 +178,10 @@ class FieldsTab extends StatelessWidget {
   }
 }
 
-class _FieldDetailScreen extends StatelessWidget {
+class FieldDetailScreen extends StatelessWidget {
   final FieldItem field;
 
-  const _FieldDetailScreen({required this.field});
+  const FieldDetailScreen({required this.field});
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +230,20 @@ class _FieldDetailScreen extends StatelessWidget {
                       Chip(label: Text('Size: $size')),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const FieldMapScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.satellite_alt),
+                      label: const Text('Map Field Boundary (Manual/Rover)'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -234,56 +252,101 @@ class _FieldDetailScreen extends StatelessWidget {
           FutureBuilder<void>(
             future: alertsProvider.ensureLoaded(),
             builder: (context, snapshot) {
-              final related = alertsProvider.alertsForField(field.id);
-              if (related.isEmpty) {
-                return const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('No alerts linked to this field yet.'),
-                  ),
-                );
-              }
-
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Field alerts', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      ...related.take(5).map(
-                        (a) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(
-                            a.severity.toLowerCase().contains('critical')
-                                ? Icons.error
-                                : (a.severity.toLowerCase().contains('high') ? Icons.warning : Icons.info_outline),
-                            color: a.severity.toLowerCase().contains('critical')
-                                ? Colors.red
-                                : (a.severity.toLowerCase().contains('high') ? Colors.orange : null),
-                          ),
-                          title: Text(a.title),
-                          subtitle: Text(a.isResolved ? 'Resolved' : 'Open'),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => _FieldAlertDetailScreen(alert: a)),
-                            );
-                          },
+              final allAlerts = alertsProvider.alertsForField(field.id);
+              final activeAlerts = allAlerts.where((a) => !a.isResolved && a.severity.toLowerCase() != 'low').toList();
+              final history = allAlerts;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (activeAlerts.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No active alerts for this field. Crop is healthy!'),
+                      ),
+                    )
+                  else
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Active alerts', style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 8),
+                            ...activeAlerts.take(5).map(
+                              (a) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  a.severity.toLowerCase().contains('critical')
+                                      ? Icons.error
+                                      : Icons.warning,
+                                  color: a.severity.toLowerCase().contains('critical')
+                                      ? Colors.red
+                                      : Colors.orange,
+                                ),
+                                title: Text(a.title),
+                                subtitle: Text(a.message, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => _FieldAlertDetailScreen(alert: a)),
+                                  );
+                                },
+                              ),
+                            ),
+                            if (activeAlerts.length > 5)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  'Showing 5 of ${activeAlerts.length}',
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
-                      if (related.length > 5)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Showing 5 of ${related.length}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                    ],
+                    ),
+                  const SizedBox(height: 12),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Health History', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          if (history.isEmpty)
+                            Text('No scans or events recorded for this field yet.', style: Theme.of(context).textTheme.bodySmall)
+                          else
+                            ...history.map((record) {
+                              final isHealthy = record.severity.toLowerCase() == 'low';
+                              final dateStr = '${record.createdAt.day}/${record.createdAt.month}/${record.createdAt.year}';
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: CircleAvatar(
+                                  backgroundColor: isHealthy ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+                                  child: Icon(
+                                    isHealthy ? Icons.eco : Icons.bug_report,
+                                    color: isHealthy ? Colors.green : Colors.orange,
+                                  ),
+                                ),
+                                title: Text(isHealthy ? 'Healthy Scan' : 'Disease Detected'),
+                                subtitle: Text('$dateStr • ${record.title.replaceAll('AI Health Alert: ', '').replaceAll('Manual Alert: ', '')}'),
+                                trailing: const Icon(Icons.chevron_right, size: 16),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => _FieldAlertDetailScreen(alert: record)),
+                                  );
+                                },
+                              );
+                            }),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               );
             },
           ),

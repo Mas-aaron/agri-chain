@@ -5,12 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/widgets/confidence_bar.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
+import 'package:agri_chain/services/mindspore_service.dart';
 
 class ResultsScreen extends StatelessWidget {
   final File imageFile;
   final List<Map<String, dynamic>> predictions;
   final int inferenceTime;
   final String? selectedFieldId;
+  final CropModel cropModel;
 
   const ResultsScreen({
     super.key,
@@ -18,6 +20,7 @@ class ResultsScreen extends StatelessWidget {
     required this.predictions,
     required this.inferenceTime,
     this.selectedFieldId,
+    required this.cropModel,
   });
 
   double _asDouble(dynamic value) {
@@ -43,8 +46,9 @@ class ResultsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final topPrediction = predictions.first;
     final rec = RecommendationService.recommendForLabel((topPrediction['label'] as String?) ?? '');
-    final isHealthy = rec.isHealthy;
-    final isNonMaize = rec.isNonMaize;
+    final isHealthy = rec.isHealthy || _isCoffeeHealthy(topPrediction['label']);
+    // isNonMaize only makes sense for the maize model — never show it for coffee
+    final isNonMaize = cropModel == CropModel.maize ? rec.isNonMaize : false;
 
     return Scaffold(
       appBar: AppBar(
@@ -98,7 +102,7 @@ class ResultsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.3),
+            color: Colors.grey.withValues(alpha: 0.3),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -273,7 +277,7 @@ class ResultsScreen extends StatelessWidget {
         _buildStatItem(
           icon: Icons.device_hub,
           label: 'Platform',
-          value: 'TFLite',
+          value: 'MindSpore Lite',
         ),
       ],
     );
@@ -313,7 +317,7 @@ class ResultsScreen extends StatelessWidget {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -410,14 +414,38 @@ class ResultsScreen extends StatelessWidget {
     }
   }
 
+  /// Returns true when the coffee model detects a healthy leaf
+  bool _isCoffeeHealthy(String? label) {
+    if (label == null) return false;
+    final key = label.trim().toLowerCase();
+    return key.contains('health') || key == 'healthy';
+  }
+
   String _getTreatmentAdvice(String disease) {
     final key = RecommendationService.normalizeLabel(disease);
 
-    if (RecommendationService.isNonMaizeLabel(key)) {
-      return 'This image does not look like a maize leaf. Please scan a clear maize leaf image in good lighting and try again.';
+    // ── Coffee-specific advice ────────────────────────────────────────────────
+    if (key.contains('leaf rust') || (key.contains('rust') && cropModel == CropModel.coffee)) {
+      return 'Coffee leaf rust (Hemileia vastatrix) is a serious fungal disease. '
+          'Apply copper-based fungicides (e.g., Bordeaux mixture) or triazole fungicides '
+          'at first signs. Remove and destroy heavily infected leaves. '
+          'Improve airflow by pruning and avoid overhead irrigation.';
     }
-    if (key.contains('healthy')) {
-      return 'Your maize plant appears healthy. Continue with regular monitoring, watering, and fertilization.';
+    if (key.contains('phoma')) {
+      return 'Phoma leaf spot is favoured by high humidity and cool temperatures. '
+          'Improve drainage and air circulation. Apply an approved fungicide '
+          '(e.g., carbendazim or chlorothalonil) during wet seasons. '
+          'Remove infected debris from the field.';
+    }
+    if (key.contains('health') || key.contains('healthy')) {
+      final cropName = cropModel == CropModel.coffee ? 'coffee' : 'maize';
+      return 'Your $cropName plant appears healthy. '
+          'Continue with regular monitoring, watering, and fertilization.';
+    }
+
+    // ── Maize-specific advice ─────────────────────────────────────────────────
+    if (cropModel == CropModel.maize && RecommendationService.isNonMaizeLabel(key)) {
+      return 'This image does not look like a maize leaf. Please scan a clear maize leaf image in good lighting and try again.';
     }
     if (key.contains('maize streak') || (key.contains('streak') && key.contains('virus')) || key.contains('msv')) {
       return 'Maize streak virus is viral and cannot be cured with fungicides. Remove severely infected plants early, control leafhoppers (vectors) using approved insect control methods, keep fields weed-free, and plant resistant/tolerant varieties where available.';
@@ -437,7 +465,8 @@ class ResultsScreen extends StatelessWidget {
   Widget _buildRecommendations(BuildContext context, RecommendationResult rec) {
     final scheme = Theme.of(context).colorScheme;
 
-    if (rec.isNonMaize) {
+    // Only show the "not a maize leaf" card when using the maize model
+    if (cropModel == CropModel.maize && rec.isNonMaize) {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -542,9 +571,9 @@ class ResultsScreen extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: scheme.primary.withOpacity(0.04),
+                      color: scheme.primary.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: scheme.primary.withOpacity(0.12)),
+                      border: Border.all(color: scheme.primary.withValues(alpha: 0.12)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,7 +590,7 @@ class ResultsScreen extends StatelessWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: scheme.primary.withOpacity(0.10),
+                                color: scheme.primary.withValues(alpha: 0.10),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Row(
@@ -675,13 +704,4 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  void _saveResult(BuildContext context) {
-    // Implement save functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Result saved to history'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
 }

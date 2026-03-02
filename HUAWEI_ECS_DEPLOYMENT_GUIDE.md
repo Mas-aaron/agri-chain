@@ -156,6 +156,8 @@ On ECS:
 cd /root/agrichain_api
 unzip -o /root/backend.zip -d /root/agrichain_api
 docker compose up -d --build
+docker logs -f agrichain_api-api-1
+
 ```
 
 ### 7.5) Backup the SQLite database (optional but recommended)

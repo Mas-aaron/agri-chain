@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ContractCreateRequest {
@@ -130,15 +130,6 @@ class LedgerEventDto {
     required this.meta,
   });
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'time': time.toIso8601String(),
-        'action': action,
-        'actor': actor,
-        'contract_id': contractId,
-        'meta': meta,
-      };
-
   factory LedgerEventDto.fromJson(Map<String, dynamic> json) {
     final tRaw = json['time'];
     final metaRaw = json['meta'];
@@ -164,22 +155,15 @@ class LedgerEventDto {
 class ContractsApiService {
   final Uri baseUri;
 
+  /// Timeout for all API calls. Android mobile networks can be slow — 15s prevents silent hangs.
+  static const _timeout = Duration(seconds: 15);
+
   const ContractsApiService(this.baseUri);
 
-  Future<String?> _idToken() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-    return user.getIdToken();
-  }
-
-  Map<String, String> _headers({String? idToken}) {
-    final headers = <String, String>{
+  Map<String, String> _headers() {
+    return <String, String>{
       'Content-Type': 'application/json',
     };
-    if (idToken != null && idToken.trim().isNotEmpty) {
-      headers['Authorization'] = 'Bearer $idToken';
-    }
-    return headers;
   }
 
   static Uri _normalizeBaseUrl(String baseUrl) {
@@ -203,16 +187,27 @@ class ContractsApiService {
     );
   }
 
+  /// Extracts a human-readable error from a backend JSON response.
+  String _parseError(http.Response resp, String fallback) {
+    try {
+      final body = jsonDecode(resp.body);
+      if (body is Map) {
+        return (body['detail'] ?? body['message'] ?? fallback).toString();
+      }
+    } catch (_) {}
+    return '$fallback (${resp.statusCode})';
+  }
+
   Future<List<YieldContractDto>> listContracts({String? status}) async {
-    final idToken = await _idToken();
-    final path = idToken == null ? '/contracts' : '/v1/contracts';
-    final resp = await http.get(
-      _url(path, query: status == null ? null : {'status': status}),
-      headers: _headers(idToken: idToken),
-    );
+    final resp = await http
+        .get(
+          _url('/contracts', query: status == null ? null : {'status': status}),
+          headers: _headers(),
+        )
+        .timeout(_timeout);
 
     if (resp.statusCode >= 400) {
-      throw Exception('Failed to load contracts (${resp.statusCode})');
+      throw Exception(_parseError(resp, 'Failed to load contracts'));
     }
 
     final decoded = jsonDecode(resp.body);
@@ -227,16 +222,16 @@ class ContractsApiService {
   }
 
   Future<YieldContractDto> createContract(ContractCreateRequest request) async {
-    final idToken = await _idToken();
-    final path = idToken == null ? '/contracts' : '/v1/contracts';
-    final resp = await http.post(
-      _url(path),
-      headers: _headers(idToken: idToken),
-      body: jsonEncode(request.toJson()),
-    );
+    final resp = await http
+        .post(
+          _url('/contracts'),
+          headers: _headers(),
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(_timeout);
 
     if (resp.statusCode >= 400) {
-      throw Exception('Failed to create contract (${resp.statusCode})');
+      throw Exception(_parseError(resp, 'Failed to create contract'));
     }
 
     final decoded = jsonDecode(resp.body);
@@ -248,16 +243,16 @@ class ContractsApiService {
   }
 
   Future<YieldContractDto> purchaseContract(String contractId, ContractPurchaseRequest request) async {
-    final idToken = await _idToken();
-    final path = idToken == null ? '/contracts/$contractId/purchase' : '/v1/contracts/$contractId/purchase';
-    final resp = await http.post(
-      _url(path),
-      headers: _headers(idToken: idToken),
-      body: jsonEncode(request.toJson()),
-    );
+    final resp = await http
+        .post(
+          _url('/contracts/$contractId/purchase'),
+          headers: _headers(),
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(_timeout);
 
     if (resp.statusCode >= 400) {
-      throw Exception('Failed to purchase contract (${resp.statusCode})');
+      throw Exception(_parseError(resp, 'Failed to purchase contract'));
     }
 
     final decoded = jsonDecode(resp.body);
@@ -269,16 +264,16 @@ class ContractsApiService {
   }
 
   Future<YieldContractDto> deliverContract(String contractId, ContractDeliverRequest request) async {
-    final idToken = await _idToken();
-    final path = idToken == null ? '/contracts/$contractId/deliver' : '/v1/contracts/$contractId/deliver';
-    final resp = await http.post(
-      _url(path),
-      headers: _headers(idToken: idToken),
-      body: jsonEncode(request.toJson()),
-    );
+    final resp = await http
+        .post(
+          _url('/contracts/$contractId/deliver'),
+          headers: _headers(),
+          body: jsonEncode(request.toJson()),
+        )
+        .timeout(_timeout);
 
     if (resp.statusCode >= 400) {
-      throw Exception('Failed to deliver contract (${resp.statusCode})');
+      throw Exception(_parseError(resp, 'Failed to deliver contract'));
     }
 
     final decoded = jsonDecode(resp.body);
@@ -290,20 +285,20 @@ class ContractsApiService {
   }
 
   Future<List<LedgerEventDto>> listLedger({String? contractId, int limit = 100}) async {
-    final idToken = await _idToken();
-    final path = idToken == null ? '/ledger' : '/v1/ledger';
     final query = <String, String>{'limit': '$limit'};
     if (contractId != null && contractId.trim().isNotEmpty) {
       query['contract_id'] = contractId.trim();
     }
 
-    final resp = await http.get(
-      _url(path, query: query),
-      headers: _headers(idToken: idToken),
-    );
+    final resp = await http
+        .get(
+          _url('/ledger', query: query),
+          headers: _headers(),
+        )
+        .timeout(_timeout);
 
     if (resp.statusCode >= 400) {
-      throw Exception('Failed to load ledger (${resp.statusCode})');
+      throw Exception(_parseError(resp, 'Failed to load ledger'));
     }
 
     final decoded = jsonDecode(resp.body);

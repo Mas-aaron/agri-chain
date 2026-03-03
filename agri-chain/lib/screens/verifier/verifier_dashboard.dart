@@ -1,16 +1,12 @@
-// Independent Verifier Dashboard — main entry screen for verifiers.
-
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:agri_chain/providers/verifier_provider.dart';
-import 'package:agri_chain/screens/verifier/widgets/stats_card.dart';
-import 'package:agri_chain/screens/verifier/widgets/asset_card.dart';
-import 'package:agri_chain/screens/verifier/widgets/submission_card.dart';
-import 'package:agri_chain/screens/verifier/pending_assets_screen.dart';
-import 'package:agri_chain/screens/verifier/submit_report_screen.dart';
-import 'package:agri_chain/screens/verifier/submission_history_screen.dart';
-import 'package:agri_chain/screens/verifier/verifier_stake_screen.dart';
-import 'package:agri_chain/screens/verifier/verifier_profile_screen.dart';
+import 'package:agri_chain/widgets/modern_ui.dart';
+import 'pending_assets_screen.dart';
+import 'submission_history_screen.dart';
+import 'verifier_stake_screen.dart';
+import 'verifier_profile_screen.dart';
 
 class VerifierDashboard extends StatefulWidget {
   const VerifierDashboard({super.key});
@@ -20,273 +16,304 @@ class VerifierDashboard extends StatefulWidget {
 }
 
 class _VerifierDashboardState extends State<VerifierDashboard> {
-  int _navIndex = 0;
+  int _tabIndex = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final prov = context.read<VerifierProvider>();
-      if (prov.verifier != null) {
-        prov.loadDashboardData();
-      }
+      context.read<VerifierProvider>().loadDashboardData();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final prov = context.watch<VerifierProvider>();
+
+    final pages = [
+      const _DashboardHome(),
+      const PendingAssetsScreen(),
+      const SubmissionHistoryScreen(),
+      const VerifierStakeScreen(),
+      const VerifierProfileScreen(),
+    ];
 
     return Scaffold(
-      body: IndexedStack(
-        index: _navIndex,
-        children: [
-          _DashboardBody(prov: prov),
-          const PendingAssetsScreen(),
-          const SubmissionHistoryScreen(),
-          const VerifierStakeScreen(),
-          const VerifierProfileScreen(),
-        ],
-      ),
+      body: pages[_tabIndex],
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _navIndex,
-        onDestinationSelected: (i) => setState(() => _navIndex = i),
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (i) => setState(() => _tabIndex = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.assignment_rounded), label: 'Assets'),
-          NavigationDestination(icon: Icon(Icons.history_rounded), label: 'History'),
-          NavigationDestination(icon: Icon(Icons.lock_rounded), label: 'Stake'),
-          NavigationDestination(icon: Icon(Icons.person_rounded), label: 'Profile'),
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assignment_outlined),
+            selectedIcon: Icon(Icons.assignment),
+            label: 'Pending',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.lock_outlined),
+            selectedIcon: Icon(Icons.lock),
+            label: 'Stake',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outlined),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );
   }
 }
 
-// ── Dashboard body ──────────────────────────────────────────────────────────
-
-class _DashboardBody extends StatelessWidget {
-  final VerifierProvider prov;
-  const _DashboardBody({required this.prov});
+// ─────────────────────────────────────────────────────────────
+// Dashboard Home Tab
+// ─────────────────────────────────────────────────────────────
+class _DashboardHome extends StatelessWidget {
+  const _DashboardHome();
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
-    if (prov.isLoading && prov.dashboardStats.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
+    final prov = context.watch<VerifierProvider>();
     final stats = prov.dashboardStats;
-    final totalSubs = stats['totalSubmissions'] ?? 0;
-    final accuracy = ((stats['accuracyRate'] ?? 0) * 100).toStringAsFixed(1);
-    final stake = (stats['stakeAmount'] ?? 0).toStringAsFixed(0);
-    final rewardsEarned = (stats['rewardsEarned'] ?? 0).toStringAsFixed(0);
-    final reputation = stats['reputationScore'] ?? 0;
 
-    return RefreshIndicator(
-      onRefresh: () => prov.loadDashboardData(),
-      child: CustomScrollView(
-        slivers: [
-          // ── App bar ────────────────────────────────────────────
-          SliverAppBar(
-            expandedHeight: 150,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [scheme.primary, scheme.primary.withOpacity(0.7)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: () => prov.loadDashboardData(),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // ── Header ──────────────────────────────────────
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.verified_user, size: 24, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Verifier Portal',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      Text(
+                        'Independent yield verification',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
                 ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Welcome back,',
-                          style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 14),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          prov.verifier?.organizationName ?? 'Verifier',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            _chip(prov.verifier?.organizationType ?? '—', Colors.white24),
-                            const SizedBox(width: 8),
-                            _chip('⭐ $reputation', Colors.white24),
-                          ],
-                        ),
-                      ],
-                    ),
+                // Logout button
+                IconButton(
+                  onPressed: () => _showLogoutDialog(context),
+                  icon: Icon(Icons.logout, color: scheme.onSurfaceVariant),
+                  tooltip: 'Sign out',
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ── Hero card ───────────────────────────────────
+            GradientHeroCard(
+              icon: Icons.verified,
+              title: 'Verification Hub',
+              subtitle: 'Submit yield reports, stake tokens, and earn rewards for accurate data.',
+            ),
+            const SizedBox(height: 20),
+
+            // ── Stats Grid ──────────────────────────────────
+            if (prov.isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else ...[
+              const SectionHeader(title: 'Your Stats'),
+              const SizedBox(height: 12),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.2,
+                children: [
+                  MiniStatTile(
+                    label: 'Submissions',
+                    value: '${stats['totalSubmissions'] ?? 0}',
+                    icon: Icons.assignment_turned_in,
                   ),
+                  MiniStatTile(
+                    label: 'Accuracy',
+                    value: '${((stats['accuracyRate'] ?? 0.0) * 100).toStringAsFixed(0)}%',
+                    icon: Icons.track_changes,
+                  ),
+                  MiniStatTile(
+                    label: 'Staked',
+                    value: '${(stats['stakeAmount'] ?? 0.0).toStringAsFixed(0)} AYT',
+                    icon: Icons.lock,
+                  ),
+                  MiniStatTile(
+                    label: 'Rewards',
+                    value: '${(stats['rewardsEarned'] ?? 0.0).toStringAsFixed(1)} AYT',
+                    icon: Icons.emoji_events,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // ── Quick Actions ─────────────────────────────
+              const SectionHeader(title: 'Quick Actions'),
+              const SizedBox(height: 12),
+              FeatureCard(
+                icon: Icons.assignment_outlined,
+                title: 'Pending Assets',
+                subtitle: '${stats['pendingAssetsCount'] ?? 0} assets awaiting verification',
+                onTap: () {
+                  // Find the parent _VerifierDashboardState and switch tab
+                  final dashState = context.findAncestorStateOfType<_VerifierDashboardState>();
+                  dashState?.setState(() => dashState._tabIndex = 1);
+                },
+              ),
+              const SizedBox(height: 10),
+              FeatureCard(
+                icon: Icons.lock_outlined,
+                title: 'Manage Stake',
+                subtitle: 'Stake tokens to increase your verification weight',
+                iconColor: Colors.orange,
+                onTap: () {
+                  final dashState = context.findAncestorStateOfType<_VerifierDashboardState>();
+                  dashState?.setState(() => dashState._tabIndex = 3);
+                },
+              ),
+              const SizedBox(height: 10),
+              FeatureCard(
+                icon: Icons.history_outlined,
+                title: 'Submission History',
+                subtitle: 'View your past yield reports and their status',
+                iconColor: Colors.blue,
+                onTap: () {
+                  final dashState = context.findAncestorStateOfType<_VerifierDashboardState>();
+                  dashState?.setState(() => dashState._tabIndex = 2);
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // ── Reputation badge ──────────────────────────
+              ModernCard(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: _reputationColor(stats['reputationScore'] ?? 500).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        Icons.star,
+                        color: _reputationColor(stats['reputationScore'] ?? 500),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${stats['reputationScore'] ?? 500} Reputation',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _reputationTier(stats['reputationScore'] ?? 500),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: (stats['isActive'] == true ? Colors.green : Colors.red).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        stats['isActive'] == true ? 'Active' : 'Inactive',
+                        style: TextStyle(
+                          color: stats['isActive'] == true ? Colors.green.shade700 : Colors.red.shade700,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              title: const Text('Verifier Dashboard'),
-            ),
-          ),
-
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // ── Stats grid ───────────────────────────────────
-                GridView.count(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.5,
-                  children: [
-                    VerifierStatsCard(
-                      title: 'Submissions',
-                      value: '$totalSubs',
-                      icon: Icons.upload_file,
-                      color: Colors.blue,
-                    ),
-                    VerifierStatsCard(
-                      title: 'Accuracy',
-                      value: '$accuracy%',
-                      icon: Icons.verified,
-                      color: Colors.green,
-                    ),
-                    VerifierStatsCard(
-                      title: 'Staked',
-                      value: '$stake AYT',
-                      icon: Icons.lock,
-                      color: Colors.orange,
-                    ),
-                    VerifierStatsCard(
-                      title: 'Rewards',
-                      value: '$rewardsEarned AYT',
-                      icon: Icons.redeem,
-                      color: Colors.purple,
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── Quick actions ────────────────────────────────
-                const Text('Quick Actions',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _actionCard(context, 'Submit\nReport', Icons.add_circle, Colors.green,
-                        () => _goTab(context, 1)),
-                    const SizedBox(width: 12),
-                    _actionCard(context, 'View\nHistory', Icons.history, Colors.blue,
-                        () => _goTab(context, 2)),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // ── Pending assets ───────────────────────────────
-                if (prov.pendingAssets.isNotEmpty) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Pending Assets',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      TextButton(
-                        onPressed: () => _goTab(context, 1),
-                        child: const Text('View All'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  for (var i = 0; i < prov.pendingAssets.length && i < 3; i++)
-                    AssetCard(
-                      asset: prov.pendingAssets[i],
-                      onSubmit: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              SubmitReportScreen(asset: prov.pendingAssets[i]),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                ],
-
-                // ── Recent submissions ───────────────────────────
-                if (prov.recentSubmissions.isNotEmpty) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Recent Submissions',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      TextButton(
-                        onPressed: () => _goTab(context, 2),
-                        child: const Text('View All'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  for (final sub in prov.recentSubmissions.take(3))
-                    SubmissionCard(submission: sub),
-                ],
-              ]),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  void _goTab(BuildContext context, int index) {
-    // Find the _VerifierDashboardState and switch tab
-    final state = context.findAncestorStateOfType<_VerifierDashboardState>();
-    state?.setState(() => state._navIndex = index);
+  static Color _reputationColor(int score) {
+    if (score >= 900) return Colors.purple;
+    if (score >= 800) return Colors.amber.shade700;
+    if (score >= 700) return Colors.grey.shade600;
+    if (score >= 600) return Colors.brown;
+    return Colors.grey;
   }
 
-  Widget _chip(String text, Color bg) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-    );
+  static String _reputationTier(int score) {
+    if (score >= 900) return 'Platinum Tier';
+    if (score >= 800) return 'Gold Tier';
+    if (score >= 700) return 'Silver Tier';
+    if (score >= 600) return 'Bronze Tier';
+    return 'New Verifier';
   }
 
-  Widget _actionCard(BuildContext context, String label, IconData icon, Color color, VoidCallback onTap) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withOpacity(0.25)),
+  static void _showLogoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out of the verifier portal?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 30),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-            ],
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              }
+            },
+            child: const Text('Sign Out'),
           ),
-        ),
+        ],
       ),
     );
   }

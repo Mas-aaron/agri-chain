@@ -21,6 +21,23 @@ class VerifierProvider extends ChangeNotifier {
   List<VerifierReward> rewards = [];
   double totalRewards = 0.0;
 
+  // ── Convenience getters for screens ───────────────────────────
+  List<Map<String, dynamic>> get submissionHistory =>
+      recentSubmissions.map((s) => {
+            'asset_id': s.assetId,
+            'submitted_yield': s.submittedYield,
+            'confidence': s.confidence,
+            'status': s.status,
+            'data_source': s.dataSource,
+          }).toList();
+
+  Map<String, dynamic> get profile => verifier != null
+      ? {
+          'organization_name': verifier!.organizationName,
+          'organization_type': verifier!.organizationType,
+        }
+      : {};
+
   // ── Registration ──────────────────────────────────────────────
 
   Future<void> register({
@@ -77,7 +94,8 @@ class VerifierProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>> submitReport({
     required String assetId,
-    required double submittedYield,
+    double? submittedYield,
+    double? yieldValue,
     double confidence = 0.8,
     String dataSource = 'INSPECTOR',
     String measurementMethod = '',
@@ -87,7 +105,7 @@ class VerifierProvider extends ChangeNotifier {
     final res = await _api.submitReport(
       verifierId: verifier!.id,
       assetId: assetId,
-      submittedYield: submittedYield,
+      submittedYield: yieldValue ?? submittedYield ?? 0.0,
       confidence: confidence,
       dataSource: dataSource,
       measurementMethod: measurementMethod,
@@ -100,6 +118,32 @@ class VerifierProvider extends ChangeNotifier {
 
   // ── Submissions ───────────────────────────────────────────────
 
+  Future<void> loadSubmissionHistory({int limit = 50}) async {
+    if (verifier == null) return;
+    _setLoading(true);
+    try {
+      final subs = await loadAllSubmissions(limit: limit);
+      recentSubmissions = subs;
+      error = null;
+    } catch (e) {
+      error = e.toString();
+    }
+    _setLoading(false);
+  }
+
+  Future<void> loadPendingAssets() async {
+    if (verifier == null) return;
+    _setLoading(true);
+    try {
+      final res = await _api.getPendingAssets();
+      pendingAssets = List<Map<String, dynamic>>.from(res['assets'] ?? []);
+      error = null;
+    } catch (e) {
+      error = e.toString();
+    }
+    _setLoading(false);
+  }
+
   Future<List<OracleSubmission>> loadAllSubmissions({int limit = 50}) async {
     if (verifier == null) return [];
     final res = await _api.getMySubmissions(verifier!.id, limit: limit);
@@ -109,12 +153,12 @@ class VerifierProvider extends ChangeNotifier {
 
   // ── Staking ───────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> stakeTokens(double amount, {int lockDays = 30}) async {
+  Future<Map<String, dynamic>> stakeTokens(double amount, [int? lockDaysPos, int lockDays = 30]) async {
     if (verifier == null) throw Exception('Not registered');
     final res = await _api.stakeTokens(
       verifierId: verifier!.id,
       amount: amount,
-      lockDays: lockDays,
+      lockDays: lockDaysPos ?? lockDays,
     );
     // Refresh profile
     await _refreshProfile();
@@ -139,10 +183,12 @@ class VerifierProvider extends ChangeNotifier {
 
   // ── Profile ───────────────────────────────────────────────────
 
-  Future<void> loadProfile(int verifierId) async {
+  Future<void> loadProfile([int? verifierId]) async {
+    final id = verifierId ?? verifier?.id;
+    if (id == null) return;
     _setLoading(true);
     try {
-      final res = await _api.getProfile(verifierId);
+      final res = await _api.getProfile(id);
       verifier = Verifier.fromJson(res['profile'] as Map<String, dynamic>);
       error = null;
     } catch (e) {

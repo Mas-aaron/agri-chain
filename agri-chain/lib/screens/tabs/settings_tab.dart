@@ -37,7 +37,7 @@ class SettingsTab extends StatelessWidget {
           subtitle: 'Coming soon',
         ),
         const SizedBox(height: 10),
-        const FeatureCard(
+        FeatureCard(
           icon: Icons.privacy_tip_outlined,
           title: 'Data & privacy',
           subtitle: 'Coming soon',

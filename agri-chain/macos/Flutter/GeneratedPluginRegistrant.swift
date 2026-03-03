@@ -12,7 +12,10 @@ import firebase_auth
 import firebase_core
 import firebase_storage
 import geolocator_apple
+<<<<<<< HEAD
+=======
 import mobile_scanner
+>>>>>>> c99e96c4556b1613c3a05662dbe45d2dc15dfd80
 import path_provider_foundation
 import shared_preferences_foundation
 import url_launcher_macos
@@ -26,7 +29,10 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
   FLTFirebaseCorePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseCorePlugin"))
   FLTFirebaseStoragePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseStoragePlugin"))
   GeolocatorPlugin.register(with: registry.registrar(forPlugin: "GeolocatorPlugin"))
+<<<<<<< HEAD
+=======
   MobileScannerPlugin.register(with: registry.registrar(forPlugin: "MobileScannerPlugin"))
+>>>>>>> c99e96c4556b1613c3a05662dbe45d2dc15dfd80
   PathProviderPlugin.register(with: registry.registrar(forPlugin: "PathProviderPlugin"))
   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
   UrlLauncherPlugin.register(with: registry.registrar(forPlugin: "UrlLauncherPlugin"))

@@ -137,31 +137,39 @@ class AlertsProvider extends ChangeNotifier {
     _alerts.clear();
     final user = FirebaseAuth.instance.currentUser;
 
+    // Always load local alerts first (instant, works offline)
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_storageKey);
+    if (raw != null && raw.isNotEmpty) {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is Map) {
+            _alerts.add(AlertItem.fromJson(item.cast<String, dynamic>()));
+          }
+        }
+      }
+    }
+
     if (user != null) {
       try {
         final snapshot = await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
             .collection('alerts')
-            .get();
+            .get(const GetOptions(source: Source.cache))
+            .timeout(const Duration(seconds: 3), onTimeout: () {
+          throw Exception('Firestore timeout — using local alerts');
+        });
+        // Merge Firestore alerts with local ones
+        final localIds = _alerts.map((a) => a.id).toSet();
         for (final doc in snapshot.docs) {
-          _alerts.add(AlertItem.fromJson(doc.data(), docId: doc.id));
-        }
-      } catch (e) {
-        debugPrint('Error loading alerts from Firestore: $e');
-      }
-    } else {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_storageKey);
-      if (raw != null && raw.isNotEmpty) {
-        final decoded = jsonDecode(raw);
-        if (decoded is List) {
-          for (final item in decoded) {
-            if (item is Map) {
-              _alerts.add(AlertItem.fromJson(item.cast<String, dynamic>()));
-            }
+          if (!localIds.contains(doc.id)) {
+            _alerts.add(AlertItem.fromJson(doc.data(), docId: doc.id));
           }
         }
+      } catch (e) {
+        debugPrint('⚠️ Firestore load failed (offline?): $e — using local alerts');
       }
     }
 
@@ -185,7 +193,7 @@ class AlertsProvider extends ChangeNotifier {
           .doc(user.uid)
           .collection('alerts')
           .doc();
-      await docRef.set(alert.toFirestore());
+      // Add locally first (instant, works offline)
       _alerts.add(AlertItem(
         id: docRef.id,
         title: alert.title,
@@ -199,6 +207,11 @@ class AlertsProvider extends ChangeNotifier {
         imagePath: alert.imagePath,
         extra: alert.extra,
       ));
+      await _saveLocal();
+      // Fire-and-forget Firestore write — syncs when online, never blocks offline
+      docRef.set(alert.toFirestore()).catchError((e) {
+        debugPrint('⚠️ Firestore alert write failed (offline?): $e');
+      });
     } else {
       _alerts.add(alert);
       await _saveLocal();
@@ -209,17 +222,17 @@ class AlertsProvider extends ChangeNotifier {
   Future<void> removeAlert(String id) async {
     await ensureLoaded();
     _alerts.removeWhere((a) => a.id == id);
+    await _saveLocal();
     
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance
+      FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('alerts')
           .doc(id)
-          .delete();
-    } else {
-      await _saveLocal();
+          .delete()
+          .catchError((e) => debugPrint('⚠️ Firestore delete failed: $e'));
     }
     notifyListeners();
   }
@@ -229,17 +242,17 @@ class AlertsProvider extends ChangeNotifier {
     final idx = _alerts.indexWhere((a) => a.id == id);
     if (idx < 0) return;
     _alerts[idx] = _alerts[idx].copyWith(isRead: isRead);
+    await _saveLocal();
     
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance
+      FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('alerts')
           .doc(id)
-          .update({'isRead': isRead});
-    } else {
-      await _saveLocal();
+          .update({'isRead': isRead})
+          .catchError((e) => debugPrint('⚠️ Firestore markRead failed: $e'));
     }
     notifyListeners();
   }
@@ -249,17 +262,17 @@ class AlertsProvider extends ChangeNotifier {
     final idx = _alerts.indexWhere((a) => a.id == id);
     if (idx < 0) return;
     _alerts[idx] = _alerts[idx].copyWith(isResolved: isResolved);
+    await _saveLocal();
     
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await FirebaseFirestore.instance
+      FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('alerts')
           .doc(id)
-          .update({'isResolved': isResolved});
-    } else {
-      await _saveLocal();
+          .update({'isResolved': isResolved})
+          .catchError((e) => debugPrint('⚠️ Firestore markResolved failed: $e'));
     }
     notifyListeners();
   }

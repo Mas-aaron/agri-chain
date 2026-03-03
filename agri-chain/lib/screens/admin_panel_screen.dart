@@ -58,12 +58,21 @@ class _ChemicalsTab extends StatelessWidget {
                 child: ListTile(
                   title: Text(chem.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('Target: ${chem.target}\nActive: ${chem.activeIngredient}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () async {
-                      await FirebaseFirestore.instance.collection('agro_chemicals').doc(chem.id).delete();
-                      await RecommendationService.reload();
-                    },
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _showEditChemicalDialog(context, chem),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance.collection('agro_chemicals').doc(chem.id).delete();
+                          await RecommendationService.reload();
+                        },
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -126,6 +135,50 @@ class _ChemicalsTab extends StatelessWidget {
       ),
     );
   }
+
+  void _showEditChemicalDialog(BuildContext context, CreditedAgrochemical chem) {
+    final nameCtrl = TextEditingController(text: chem.name);
+    final activeCtrl = TextEditingController(text: chem.activeIngredient);
+    final targetCtrl = TextEditingController(text: chem.target);
+    final usageCtrl = TextEditingController(text: chem.usage);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Agrochemical'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 8),
+              TextField(controller: activeCtrl, decoration: const InputDecoration(labelText: 'Active Ingredient')),
+              const SizedBox(height: 8),
+              TextField(controller: targetCtrl, decoration: const InputDecoration(labelText: 'Targets (comma separated)')),
+              const SizedBox(height: 8),
+              TextField(controller: usageCtrl, decoration: const InputDecoration(labelText: 'Usage Notes')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('agro_chemicals').doc(chem.id).update({
+                'name': nameCtrl.text,
+                'activeIngredient': activeCtrl.text,
+                'target': targetCtrl.text,
+                'usage': usageCtrl.text,
+              });
+              await RecommendationService.reload();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SellersTab extends StatelessWidget {
@@ -151,12 +204,21 @@ class _SellersTab extends StatelessWidget {
                 child: ListTile(
                   title: Text(seller.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('${seller.location} • ${seller.phone}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () async {
-                      await FirebaseFirestore.instance.collection('agro_sellers').doc(seller.id).delete();
-                      await RecommendationService.reload();
-                    },
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _showEditSellerDialog(context, seller),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance.collection('agro_sellers').doc(seller.id).delete();
+                          await RecommendationService.reload();
+                        },
+                      ),
+                    ],
                   ),
                 ),
               );
@@ -213,6 +275,50 @@ class _SellersTab extends StatelessWidget {
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showEditSellerDialog(BuildContext context, ApprovedSeller seller) {
+    final nameCtrl = TextEditingController(text: seller.name);
+    final phoneCtrl = TextEditingController(text: seller.phone);
+    final locationCtrl = TextEditingController(text: seller.location);
+    final licenseCtrl = TextEditingController(text: seller.licenseId ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Seller'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 8),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone')),
+              const SizedBox(height: 8),
+              TextField(controller: locationCtrl, decoration: const InputDecoration(labelText: 'Location')),
+              const SizedBox(height: 8),
+              TextField(controller: licenseCtrl, decoration: const InputDecoration(labelText: 'License ID')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance.collection('agro_sellers').doc(seller.id).update({
+                'name': nameCtrl.text,
+                'phone': phoneCtrl.text,
+                'location': locationCtrl.text,
+                'licenseId': licenseCtrl.text.isEmpty ? null : licenseCtrl.text,
+              });
+              await RecommendationService.reload();
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Save'),
           ),
         ],
       ),

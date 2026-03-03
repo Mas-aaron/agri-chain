@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AgriChain — Huawei ICT Competition 2025-2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e17;--surface:rgba(255,255,255,.04);--glass:rgba(255,255,255,.06);
+  --border:rgba(255,255,255,.08);--text:#e4e8f1;--muted:#8a92a6;
+  --accent:#22c55e;--accent2:#10b981;--accent-glow:rgba(34,197,94,.25);
+  --blue:#3b82f6;--violet:#8b5cf6;--amber:#f59e0b;--rose:#f43f5e;
+  --slide-w:1280px;--slide-h:720px;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:'Inter',sans-serif;color:var(--text)}
+
+/* ─── Slide Engine ─── */
+.deck{position:relative;width:100vw;height:100vh;overflow:hidden}
+.slide{
+  position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;
+  padding:60px 80px;opacity:0;pointer-events:none;transition:opacity .5s ease,transform .5s ease;
+  transform:translateX(60px);
+}
+.slide.active{opacity:1;pointer-events:auto;transform:none}
+.slide.prev{opacity:0;transform:translateX(-60px)}
+
+/* ─── Progress Bar ─── */
+.progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--blue));transition:width .4s ease;z-index:100;border-radius:0 2px 2px 0}
+
+/* ─── Slide Counter ─── */
+.counter{position:fixed;bottom:24px;right:36px;font-size:13px;color:var(--muted);font-weight:500;z-index:100;letter-spacing:.5px}
+
+/* ─── Navigation Arrows ─── */
+.nav-arrows{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:12px;z-index:100}
+.nav-arrows button{background:var(--glass);border:1px solid var(--border);color:var(--text);width:40px;height:40px;border-radius:10px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.nav-arrows button:hover{background:var(--accent);color:#000;border-color:var(--accent)}
+
+/* ─── Typography ─── */
+h1{font-size:52px;font-weight:900;line-height:1.1;letter-spacing:-1.5px}
+h2{font-size:36px;font-weight:800;line-height:1.2;letter-spacing:-.8px}
+h3{font-size:22px;font-weight:700;letter-spacing:-.3px}
+p,.desc{font-size:17px;line-height:1.7;color:var(--muted);max-width:700px}
+.label{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.label.blue{color:var(--blue)}.label.violet{color:var(--violet)}.label.amber{color:var(--amber)}.label.rose{color:var(--rose)}
+
+/* ─── Layout Helpers ─── */
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:16px}
+.mt{margin-top:28px}.mt-sm{margin-top:14px}.mb{margin-bottom:18px}
+
+/* ─── Cards ─── */
+.card{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:24px;transition:all .3s}
+.card:hover{border-color:rgba(255,255,255,.15);transform:translateY(-2px)}
+.card.accent{border-left:3px solid var(--accent)}
+.card.blue{border-left:3px solid var(--blue)}
+.card.violet{border-left:3px solid var(--violet)}
+.card.amber{border-left:3px solid var(--amber)}
+.card.rose{border-left:3px solid var(--rose)}
+.card h3{margin-bottom:8px}.card p{font-size:14px;line-height:1.6}
+
+/* ─── Stat Blocks ─── */
+.stat{text-align:center;padding:20px}
+.stat .num{font-size:42px;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat .unit{font-size:13px;color:var(--muted);margin-top:4px;font-weight:500}
+
+/* ─── Code Block ─── */
+.code{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:12px;padding:18px 22px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.7;overflow-x:auto;color:#a5f3c4}
+.code .kw{color:#c084fc}.code .fn{color:#60a5fa}.code .str{color:#fbbf24}.code .cm{color:#64748b}
+
+/* ─── Tag ─── */
+.tag{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;margin:2px}
+.tag.green{background:rgba(34,197,94,.15);color:#4ade80}
+.tag.blue{background:rgba(59,130,246,.15);color:#60a5fa}
+.tag.violet{background:rgba(139,92,246,.15);color:#a78bfa}
+.tag.amber{background:rgba(245,158,11,.15);color:#fcd34d}
+.tag.rose{background:rgba(244,63,94,.15);color:#fb7185}
+
+/* ─── Decorative blobs ─── */
+.blob{position:absolute;border-radius:50%;filter:blur(120px);opacity:.25;pointer-events:none;z-index:0}
+.blob.g{background:var(--accent);width:400px;height:400px;top:-80px;right:-100px}
+.blob.b{background:var(--blue);width:350px;height:350px;bottom:-60px;left:-80px}
+.blob.v{background:var(--violet);width:300px;height:300px;top:40%;left:60%}
+
+/* ─── Flow Diagram ─── */
+.flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;justify-content:center}
+.flow-step{background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:14px 18px;text-align:center;min-width:120px}
+.flow-step h4{font-size:13px;font-weight:700;margin-bottom:4px}
+.flow-step p{font-size:11px;color:var(--muted)}
+.flow-arrow{font-size:22px;color:var(--accent);margin:0 4px}
+
+/* ─── Highlight line ─── */
+.hl{position:relative;display:inline}
+.hl::after{content:'';position:absolute;left:0;bottom:-2px;width:100%;height:3px;background:var(--accent);border-radius:2px}
+
+/* ─── Animated Icon ─── */
+.icon-box{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:12px;flex-shrink:0}
+.icon-box.green{background:rgba(34,197,94,.15)}.icon-box.blue{background:rgba(59,130,246,.15)}
+.icon-box.violet{background:rgba(139,92,246,.15)}.icon-box.amber{background:rgba(245,158,11,.15)}
+.icon-box.rose{background:rgba(244,63,94,.15)}
+
+/* ─── Logo style ─── */
+.logo-bar{position:fixed;top:24px;left:36px;display:flex;align-items:center;gap:10px;z-index:100}
+.logo-bar .dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.logo-bar span{font-size:14px;font-weight:700;letter-spacing:.5px}
+
+/* ─── Table ─── */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:1px}
+.tbl td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.04)}
+.tbl tr:hover td{background:rgba(255,255,255,.02)}
+
+/* ─── Arch Layers ─── */
+.arch-layer{border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin-bottom:8px;display:flex;align-items:center;gap:16px;transition:all .3s}
+.arch-layer:hover{border-color:rgba(255,255,255,.18);background:var(--glass)}
+.arch-layer .lnum{font-size:11px;font-weight:800;color:var(--accent);width:18px}
+.arch-layer .ltitle{font-weight:700;font-size:14px;min-width:180px}
+.arch-layer .ldesc{font-size:12px;color:var(--muted)}
+
+/* Team */
+.member{text-align:center}
+.member .avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--blue));margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#000}
+.member .name{font-weight:700;font-size:14px}
+.member .role{font-size:12px;color:var(--muted)}
+
+/* Responsive fit */
+@media(max-width:900px){
+  .slide{padding:30px 36px}
+  h1{font-size:34px}h2{font-size:26px}
+  .grid3,.grid4{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="logo-bar"><div class="dot"></div><span>AgriChain</span></div>
+<div class="progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+
+<div class="deck" id="deck">
+
+<!-- ══════════════════════════════════════════════════ SLIDE 1 — TITLE ══════════════════════════════════════════════════ -->
+<section class="slide active" data-slide="0">
+  <div class="blob g"></div><div class="blob b"></div>
+  <p class="label" style="margin-bottom:18px">Huawei ICT Competition 2025–2026 · Topic 1: AI Innovation with MindSpore</p>
+  <h1 style="max-width:800px">AgriChain<br><span style="color:var(--accent)">AI-Driven Sustainable Agriculture</span><br>for Smallholder Farmers</h1>
+  <p class="mt" style="max-width:600px;font-size:18px">An integrated ecosystem powered by <strong style="color:var(--text)">MindSpore</strong>, <strong style="color:var(--text)">Blockchain</strong> & <strong style="color:var(--text)">IoT</strong> — transforming data into prosperity for 250 million African farmers.</p>
+  <div class="mt" style="display:flex;gap:10px;flex-wrap:wrap">
+    <span class="tag green">MindSpore</span><span class="tag blue">Huawei Cloud</span>
+    <span class="tag violet">Huawei BCS</span><span class="tag amber">ModelArts</span>
+    <span class="tag rose">IoT / Rover</span>
+  </div>
+  <p class="mt-sm" style="font-size:13px;color:var(--muted)">Mountains of the Moon University · Team AgriChain</p>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 2 — PROBLEM ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="1">
+  <div class="blob v"></div>
+  <p class="label rose">The Problem</p>
+  <h2 class="mb">Africa's Agriculture is Broken</h2>
+  <div class="grid3 mt">
+    <div class="card rose">
+      <div class="icon-box rose">🌡️</div>
+      <h3>Climate Vulnerability</h3>
+      <p>Up to <strong style="color:var(--text)">40% yield fluctuations</strong> due to unpredictable weather and pest outbreaks. Farmers lack data-driven early warning.</p>
+    </div>
+    <div class="card amber">
+      <div class="icon-box amber">📦</div>
+      <h3>Post-Harvest Losses</h3>
+      <p>Over <strong style="color:var(--text)">30% of produce</strong> is lost to poor storage, inefficient logistics, and supply-demand mismatch before reaching market.</p>
+    </div>
+    <div class="card violet">
+      <div class="icon-box violet">🏦</div>
+      <h3>Financial Exclusion</h3>
+      <p><strong style="color:var(--text)">80% of smallholder farmers</strong> lack formal credit. Middlemen take 40-60% of value; informal loans charge 25-40% APR.</p>
+    </div>
+  </div>
+  <p class="mt" style="text-align:center;font-size:15px;color:var(--muted)">These affect <strong style="color:var(--text)">250 million+</strong> smallholder farmers — the backbone of African agriculture employing 60% of the population.</p>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 3 — SOLUTION OVERVIEW ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="2">
+  <div class="blob g"></div>
+  <p class="label">Our Solution</p>
+  <h2 class="mb">A Full-Stack AI + Blockchain Ecosystem</h2>
+  <div class="grid3">
+    <div class="card accent">
+      <div class="icon-box green">🧠</div>
+      <h3>Module 1: AI Field Analyst</h3>
+      <p>MindSpore MobileNetV2 CNN for <strong style="color:var(--text)">pre-symptomatic</strong> crop disease detection on-device. Offline-first, ~42ms inference.</p>
+      <div class="mt-sm"><span class="tag green">MindSpore Lite</span><span class="tag green">On-Device</span></div>
+    </div>
+    <div class="card blue">
+      <div class="icon-box blue">📊</div>
+      <h3>Module 2: Yield Intelligence</h3>
+      <p>DNN/Linear Regression model predicts harvest volume from soil chemistry, weather & sensor data. Tokenizes predictions into blockchain assets.</p>
+      <div class="mt-sm"><span class="tag blue">FastAPI</span><span class="tag blue">ModelArts</span></div>
+    </div>
+    <div class="card violet">
+      <div class="icon-box violet">🔗</div>
+      <h3>Module 3: Agri-Market</h3>
+      <p>Hyperledger Fabric smart contracts create <strong style="color:var(--text)">"Future Harvest Contracts"</strong> — bankable yield tokens enabling farmer credit access.</p>
+      <div class="mt-sm"><span class="tag violet">Huawei BCS</span><span class="tag violet">ERC-1155</span></div>
+    </div>
+  </div>
+  <div class="mt" style="text-align:center">
+    <div class="flow">
+      <div class="flow-step"><h4>📸 Capture</h4><p>Camera / Rover</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step"><h4>🧠 Analyse</h4><p>MindSpore AI</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step"><h4>📊 Predict</h4><p>Yield Engine</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step"><h4>🔗 Tokenize</h4><p>BCS Ledger</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step"><h4>💰 Trade</h4><p>Marketplace</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 4 — INNOVATION: AI ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="3">
+  <div class="blob b"></div>
+  <p class="label">Innovation (40%) — AI Architecture</p>
+  <h2 class="mb">MindSpore-Powered On-Device Disease Detection</h2>
+  <div class="row">
+    <div class="col">
+      <div class="card accent" style="margin-bottom:16px">
+        <h3>🏗️ Architecture: MobileNetV2</h3>
+        <p>Transfer-learning on MindSpore with <code style="color:var(--accent)">nn.SoftmaxCrossEntropyWithLogits</code>. Trained on <strong style="color:var(--text)">Huawei ModelArts</strong> with Ascend acceleration.</p>
+      </div>
+      <div class="card accent" style="margin-bottom:16px">
+        <h3>📱 Custom Flutter Plugin</h3>
+        <p>Built a <strong style="color:var(--text)">native MindSpore Lite Flutter plugin</strong> (Java + C++ JNI → Dart). First-of-its-kind integration enabling .ms model inference inside Flutter via platform channels.</p>
+      </div>
+      <div class="card accent">
+        <h3>🔄 End-to-End Pipeline</h3>
+        <p>Train (.mindir) → <code style="color:var(--accent)">converter_lite</code> → Optimized .ms → On-device inference. Fully offline capable — critical for rural areas.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="code">
+<span class="cm"># MindSpore Training Pipeline</span>
+<span class="kw">from</span> mindvision.classification.models <span class="kw">import</span> <span class="fn">mobilenet_v2</span>
+
+network = <span class="fn">mobilenet_v2</span>(num_classes=<span class="str">4</span>)
+loss = nn.<span class="fn">SoftmaxCrossEntropyWithLogits</span>(
+    sparse=<span class="str">True</span>, reduction=<span class="str">'mean'</span>
+)
+opt = nn.<span class="fn">Adam</span>(lr=<span class="str">0.0005</span>)
+
+<span class="cm"># Export for mobile</span>
+<span class="fn">export</span>(net, input_tensor,
+       file_name=<span class="str">"maize_disease"</span>,
+       file_format=<span class="str">"MINDIR"</span>)
+
+<span class="cm"># Convert to MindSpore Lite</span>
+<span class="fn">converter_lite</span> --fmk=MINDIR
+  --modelFile=maize_disease.mindir
+  --outputFile=maize_disease_fp32
+  --inputShape=<span class="str">"1,3,224,224"</span>
+      </div>
+      <p class="mt-sm" style="font-size:12px;color:var(--muted);text-align:center">Data pipeline: Resize → RandomCrop → Flip → ColorJitter → Normalize → HWC2CHW</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 5 — INNOVATION: BLOCKCHAIN ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="4">
+  <div class="blob v"></div>
+  <p class="label violet">Innovation (40%) — Blockchain & Tokenization</p>
+  <h2 class="mb">AI Predictions → Bankable Digital Assets</h2>
+  <div class="row">
+    <div class="col">
+      <p class="desc">Our core innovation: <strong style="color:var(--text)">ML yield predictions are tokenized into ERC-1155 "Future Harvest Contracts"</strong> on Huawei BCS. This is the first system where an AI model output directly underpins a financial instrument for smallholder farmers.</p>
+      <div class="mt grid2" style="gap:12px">
+        <div class="card violet" style="padding:16px">
+          <h3 style="font-size:15px">🪙 Yield Tokens</h3>
+          <p style="font-size:12px">Each kg of predicted yield = 1 token. Farmers own tradeable digital assets.</p>
+        </div>
+        <div class="card violet" style="padding:16px">
+          <h3 style="font-size:15px">🏦 Collateralized Loans</h3>
+          <p style="font-size:12px">Tokens locked as collateral. Banks lend at 12-18% vs. 25-40% informal rates.</p>
+        </div>
+        <div class="card violet" style="padding:16px">
+          <h3 style="font-size:15px">🛒 Token Marketplace</h3>
+          <p style="font-size:12px">Buyers purchase futures directly. PesaPal mobile money integration.</p>
+        </div>
+        <div class="card violet" style="padding:16px">
+          <h3 style="font-size:15px">📜 Immutable Ledger</h3>
+          <p style="font-size:12px">Full farm-to-fork traceability. QR-code verification for consumers.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="code" style="font-size:11.5px">
+<span class="cm">// Hyperledger Fabric Chaincode (Go)</span>
+<span class="kw">type</span> <span class="fn">YieldAsset</span> <span class="kw">struct</span> {
+  AssetID           <span class="str">string</span>
+  TokenID           <span class="str">string</span>
+  FarmerDID         <span class="str">string</span>  <span class="cm">// DID identity</span>
+  PredictedYield    <span class="str">float64</span>
+  PredictionConfidence <span class="str">float64</span>
+  MLModelVersion    <span class="str">string</span>
+  MLModelHash       <span class="str">string</span>  <span class="cm">// integrity</span>
+  RoverDataHash     <span class="str">string</span>  <span class="cm">// ground truth</span>
+  TokenAmount       <span class="str">int64</span>
+  TokenStandard     <span class="str">string</span>  <span class="cm">// "ERC-1155"</span>
+  Collateralized    <span class="str">bool</span>
+  CurrentValue      <span class="str">float64</span>
+}
+
+<span class="kw">type</span> <span class="fn">LoanAgreement</span> <span class="kw">struct</span> {
+  LoanID        <span class="str">string</span>
+  AssetIDs      []<span class="str">string</span>  <span class="cm">// collateral</span>
+  LoanAmount    <span class="str">float64</span>
+  InterestRate  <span class="str">float64</span>
+  CollateralRatio <span class="str">float64</span>
+}
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 6 — INNOVATION: IoT ROVER ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="5">
+  <div class="blob g"></div>
+  <p class="label amber">Innovation (40%) — IoT Ground-Truth Rover</p>
+  <h2 class="mb">ESP32 Autonomous Field-Mapping Rover</h2>
+  <div class="row">
+    <div class="col">
+      <p class="desc">A custom-built IoT rover provides <strong style="color:var(--text)">ground-truth GPS field mapping</strong>, real-time NPK/pH soil analysis, and autonomous navigation — feeding verified data into the AI prediction pipeline.</p>
+      <div class="mt" style="display:flex;flex-direction:column;gap:10px">
+        <div class="card amber" style="padding:14px;display:flex;align-items:center;gap:14px">
+          <span style="font-size:24px">📡</span>
+          <div><strong style="font-size:13px">GPS + HDOP Tracking</strong><br><span style="font-size:12px;color:var(--muted)">TinyGPS++ with Kalman filtering for path smoothing</span></div>
+        </div>
+        <div class="card amber" style="padding:14px;display:flex;align-items:center;gap:14px">
+          <span style="font-size:24px">🧪</span>
+          <div><strong style="font-size:13px">7-in-1 Soil Sensor (RS485)</strong><br><span style="font-size:12px;color:var(--muted)">N, P, K, pH, Moisture, Temperature, EC — via Modbus RTU</span></div>
+        </div>
+        <div class="card amber" style="padding:14px;display:flex;align-items:center;gap:14px">
+          <span style="font-size:24px">🤖</span>
+          <div><strong style="font-size:13px">Autonomous Navigation</strong><br><span style="font-size:12px;color:var(--muted)">Waypoint-based routing with GPS-guided motor control</span></div>
+        </div>
+        <div class="card amber" style="padding:14px;display:flex;align-items:center;gap:14px">
+          <span style="font-size:24px">☁️</span>
+          <div><strong style="font-size:13px">Huawei IoTDA Integration</strong><br><span style="font-size:12px;color:var(--muted)">MQTT telemetry → Huawei Cloud → Backend pipeline</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="code" style="font-size:11px">
+<span class="cm">// ESP32 Rover — Sensor Data Push</span>
+<span class="kw">void</span> <span class="fn">publishGpsTelemetry</span>() {
+  JsonObject props = svc.<span class="fn">createNestedObject</span>(
+    <span class="str">"properties"</span>);
+  props[<span class="str">"lat"</span>]   = gpsData.latitude;
+  props[<span class="str">"lon"</span>]   = gpsData.longitude;
+  props[<span class="str">"sat"</span>]   = gpsData.satellites;
+  props[<span class="str">"hdop"</span>]  = gpsData.hdop;
+
+  <span class="cm">// Attach NPK soil data</span>
+  <span class="kw">if</span> (npkData.isValid) {
+    props[<span class="str">"nitrogen"</span>]    = npkData.nitrogen;
+    props[<span class="str">"phosphorus"</span>]  = npkData.phosphorus;
+    props[<span class="str">"potassium"</span>]   = npkData.potassium;
+    props[<span class="str">"ph"</span>]          = npkData.ph;
+    props[<span class="str">"moisture"</span>]    = npkData.moisture;
+  }
+
+  String topic = <span class="str">"$oc/devices/"</span>
+    + iotdaDeviceId
+    + <span class="str">"/sys/properties/report"</span>;
+  mqttClient.<span class="fn">publish</span>(topic, payload);
+}
+      </div>
+      <div class="mt-sm" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+        <span class="tag amber">ESP32-WROOM</span>
+        <span class="tag amber">WiFi + BLE</span>
+        <span class="tag amber">2 × Servo</span>
+        <span class="tag amber">Web UI</span>
+        <span class="tag amber">MQTT / TLS</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 7 — ARCHITECTURE ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="6">
+  <div class="blob b"></div>
+  <p class="label blue">Technical Architecture</p>
+  <h2 class="mb">Six-Layer Modular Architecture</h2>
+  <div style="max-width:800px;margin:0 auto">
+    <div class="arch-layer" style="border-color:var(--accent)">
+      <div class="lnum">6</div><div class="ltitle" style="color:var(--accent)">📱 Presentation Layer</div>
+      <div class="ldesc">Flutter Mobile App · USSD/SMS Gateway · Web Dashboard</div>
+    </div>
+    <div class="arch-layer" style="border-color:var(--blue)">
+      <div class="lnum" style="color:var(--blue)">5</div><div class="ltitle" style="color:var(--blue)">🔗 Blockchain Layer</div>
+      <div class="ldesc">Huawei BCS · Hyperledger Fabric · Smart Contracts (Go) · ERC-1155 Tokens</div>
+    </div>
+    <div class="arch-layer" style="border-color:var(--violet)">
+      <div class="lnum" style="color:var(--violet)">4</div><div class="ltitle" style="color:var(--violet)">🧠 AI Intelligence Layer</div>
+      <div class="ldesc">MindSpore CNN (Disease) · DNN (Yield) · On-device MindSpore Lite · ModelArts</div>
+    </div>
+    <div class="arch-layer" style="border-color:var(--amber)">
+      <div class="lnum" style="color:var(--amber)">3</div><div class="ltitle" style="color:var(--amber)">⚙️ Backend Services</div>
+      <div class="ldesc">Python FastAPI · Yield Prediction API · BCS Gateway · PesaPal Payments</div>
+    </div>
+    <div class="arch-layer" style="border-color:var(--rose)">
+      <div class="lnum" style="color:var(--rose)">2</div><div class="ltitle" style="color:var(--rose)">📡 Data Ingestion Layer</div>
+      <div class="ldesc">ESP32 Rover (GPS + NPK) · Camera · Sentinel-2 Satellite · Weather APIs</div>
+    </div>
+    <div class="arch-layer" style="border-color:#94a3b8">
+      <div class="lnum" style="color:#94a3b8">1</div><div class="ltitle" style="color:#94a3b8">☁️ Infrastructure Layer</div>
+      <div class="ldesc">Huawei Cloud ECS · OBS Storage · RDS · IoTDA · HMS Core</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 8 — HUAWEI TECH STACK ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="7">
+  <div class="blob g"></div>
+  <p class="label">Huawei Technology Stack</p>
+  <h2 class="mb">Deep Integration with Huawei Ecosystem</h2>
+  <div class="grid2">
+    <div class="card accent" style="display:flex;gap:16px;align-items:flex-start">
+      <div class="icon-box green" style="font-size:20px;min-width:48px">🧠</div>
+      <div>
+        <h3>MindSpore & MindSpore Lite</h3>
+        <p>AI framework for training MobileNetV2 models. Custom Flutter plugin wraps MindSpore Lite C++ engine for ARM64 on-device inference with <strong style="color:var(--text)">sub-50ms latency</strong>.</p>
+      </div>
+    </div>
+    <div class="card blue" style="display:flex;gap:16px;align-items:flex-start">
+      <div class="icon-box blue" style="font-size:20px;min-width:48px">🎓</div>
+      <div>
+        <h3>ModelArts</h3>
+        <p>Cloud training platform with managed Jupyter notebooks, OBS data mounting, and Ascend AI processor acceleration for rapid model iteration.</p>
+      </div>
+    </div>
+    <div class="card violet" style="display:flex;gap:16px;align-items:flex-start">
+      <div class="icon-box violet" style="font-size:20px;min-width:48px">🔗</div>
+      <div>
+        <h3>Blockchain Service (BCS)</h3>
+        <p>Permissioned Hyperledger Fabric consortium. 4 organizations: FarmerOrg, BankOrg, ExchangeOrg, GovernmentOrg — with TLS certificates.</p>
+      </div>
+    </div>
+    <div class="card amber" style="display:flex;gap:16px;align-items:flex-start">
+      <div class="icon-box amber" style="font-size:20px;min-width:48px">☁️</div>
+      <div>
+        <h3>Huawei Cloud (ECS, OBS, RDS)</h3>
+        <p>Backend deployed on ECS. OBS stores satellite imagery and sensor data. RDS for structured data. IoTDA for rover MQTT telemetry.</p>
+      </div>
+    </div>
+  </div>
+  <div class="mt" style="text-align:center">
+    <div class="flow">
+      <div class="flow-step" style="border-color:var(--accent)"><h4>MindSpore</h4><p>Train</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color:var(--amber)"><h4>ModelArts</h4><p>Deploy</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color:var(--accent)"><h4>MS Lite</h4><p>Edge Infer</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color:var(--blue)"><h4>ECS API</h4><p>Predict</p></div><span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color:var(--violet)"><h4>BCS</h4><p>Tokenize</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 9 — APPLICATION VALUE ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="8">
+  <div class="blob v"></div>
+  <p class="label amber">Application Value (35%)</p>
+  <h2 class="mb">Real-World Impact at Every Level</h2>
+  <div class="grid3">
+    <div class="card accent" style="text-align:center">
+      <div style="font-size:36px;margin-bottom:8px">🌾</div>
+      <h3>For Farmers</h3>
+      <div class="stat"><div class="num">-20%</div><div class="unit">Crop Loss Reduction</div></div>
+      <p style="font-size:13px;text-align:left">Early disease alerts via on-device AI. Optimized input use (fertilizer, water) reduces waste by 25%. Proactive instead of reactive farming.</p>
+    </div>
+    <div class="card blue" style="text-align:center">
+      <div style="font-size:36px;margin-bottom:8px">💰</div>
+      <h3>For Farmer Income</h3>
+      <div class="stat"><div class="num">+30-50%</div><div class="unit">Revenue Increase</div></div>
+      <p style="font-size:13px;text-align:left">Eliminating middlemen through direct marketplace access. Yield tokens provide collateral for affordable credit at 12-18% APR.</p>
+    </div>
+    <div class="card violet" style="text-align:center">
+      <div style="font-size:36px;margin-bottom:8px">🌍</div>
+      <h3>For Society</h3>
+      <div class="stat"><div class="num">-50%</div><div class="unit">Food Waste Reduction</div></div>
+      <p style="font-size:13px;text-align:left">Demand-matched production via future contracts. Full farm-to-fork traceability. Supports UN SDG #2 (Zero Hunger) and #12 (Responsible Consumption).</p>
+    </div>
+  </div>
+  <div class="mt grid2" style="max-width:700px;margin:20px auto 0">
+    <div class="card amber" style="padding:14px;text-align:center">
+      <strong style="color:var(--amber)">Target Market</strong>
+      <p style="font-size:13px;margin-top:4px">Maize — staple for 300M Africans. Replicable to coffee, wheat, and other crops.</p>
+    </div>
+    <div class="card rose" style="padding:14px;text-align:center">
+      <strong style="color:var(--rose)">Scalable Design</strong>
+      <p style="font-size:13px;margin-top:4px">Cloud-native (Huawei ECS). Supports USSD/SMS for feature-phone farmers alongside full mobile apps.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 10 — PERFORMANCE METRICS ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="9">
+  <div class="blob b"></div>
+  <p class="label">Performance & Benchmarks</p>
+  <h2 class="mb">Measurable, Reproducible Results</h2>
+  <div class="grid4 mt">
+    <div class="stat card"><div class="num">97%+</div><div class="unit">Disease Detection<br>Accuracy</div></div>
+    <div class="stat card"><div class="num">42ms</div><div class="unit">Avg. Inference<br>Latency (CPU)</div></div>
+    <div class="stat card"><div class="num">~24</div><div class="unit">Frames Per Second<br>Throughput</div></div>
+    <div class="stat card"><div class="num">120ms</div><div class="unit">Cold-Start<br>Model Load</div></div>
+  </div>
+  <div class="mt">
+    <table class="tbl">
+      <thead><tr><th>Model</th><th>Architecture</th><th>Input Shape</th><th>Classes</th><th>Avg Latency</th><th>P95 Latency</th><th>FPS</th></tr></thead>
+      <tbody>
+        <tr><td><strong style="color:var(--accent)">Maize Disease</strong></td><td>MobileNetV2</td><td>1×224×224×3</td><td>4 (Blight, Rust, GLS, Healthy)</td><td>42.15 ms</td><td>46.80 ms</td><td>23.72</td></tr>
+        <tr><td><strong style="color:var(--accent)">Coffee Disease</strong></td><td>MobileNetV2</td><td>1×224×224×3</td><td>3 (Healthy, Leaf Rust, Phoma)</td><td>41.80 ms</td><td>45.92 ms</td><td>23.92</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="mt-sm grid3" style="gap:12px">
+    <div class="card accent" style="padding:12px;text-align:center;font-size:13px">
+      <strong>✅ Fully Offline</strong><br>No network required for inference
+    </div>
+    <div class="card accent" style="padding:12px;text-align:center;font-size:13px">
+      <strong>✅ No Thermal Throttling</strong><br>Stable on sustained workloads
+    </div>
+    <div class="card accent" style="padding:12px;text-align:center;font-size:13px">
+      <strong>✅ Edge Optimized</strong><br>Runs on budget Snapdragon CPUs
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 11 — COMPLETENESS ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="10">
+  <div class="blob g"></div>
+  <p class="label blue">Completeness & Demonstrability (15%)</p>
+  <h2 class="mb">5 Production-Ready Modules</h2>
+  <div class="grid2" style="gap:14px">
+    <div class="card accent" style="padding:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span class="tag green" style="font-size:12px">MODULE 1</span><h3 style="font-size:15px">Flutter Mobile App</h3>
+      </div>
+      <p style="font-size:12px">23+ screens: Disease diagnosis, yield prediction, blockchain wallet, marketplace, contracts, loan applications, traceability, rover control, admin panel. Firebase auth + Supabase data.</p>
+    </div>
+    <div class="card blue" style="padding:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span class="tag blue" style="font-size:12px">MODULE 2</span><h3 style="font-size:15px">MindSpore Lite Plugin</h3>
+      </div>
+      <p style="font-size:12px">Custom Flutter plugin with Dart API → Platform Channel → Java/C++ JNI → MindSpore Lite C++ engine. Model hot-swap between maize & coffee. Reusable open-source plugin.</p>
+    </div>
+    <div class="card violet" style="padding:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span class="tag violet" style="font-size:12px">MODULE 3</span><h3 style="font-size:15px">Backend API (FastAPI)</h3>
+      </div>
+      <p style="font-size:12px">Python FastAPI with yield prediction endpoint, BCS gateway integration, sensor data ingestion, rover session management. Dockerized for Huawei ECS deployment.</p>
+    </div>
+    <div class="card amber" style="padding:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span class="tag amber" style="font-size:12px">MODULE 4</span><h3 style="font-size:15px">Blockchain Chaincode</h3>
+      </div>
+      <p style="font-size:12px">Go smart contracts on Huawei BCS: CreateYieldAsset, GetBalance, GetAssetsByFarmer, LoanAgreement management, TokenTrade execution. Full lifecycle coverage.</p>
+    </div>
+    <div class="card rose" style="padding:16px;grid-column:1/-1">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span class="tag rose" style="font-size:12px">MODULE 5</span><h3 style="font-size:15px">ESP32 IoT Rover (2,089 lines of firmware)</h3>
+      </div>
+      <p style="font-size:12px">WiFi AP + Bluetooth + Web UI + REST API. GPS field mapping with path recording/replay. 7-in-1 NPK soil sensor via Modbus RS485. Servo-driven soil sampling. Huawei IoTDA MQTT telemetry. Autonomous waypoint navigation.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 12 — REPRODUCIBILITY ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="11">
+  <div class="blob v"></div>
+  <p class="label">Reproducibility & Open Source</p>
+  <h2 class="mb">Fully Reproducible in 4 Steps</h2>
+  <div class="row">
+    <div class="col" style="max-width:55%">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="card accent" style="padding:16px;display:flex;gap:16px;align-items:center">
+          <div style="min-width:36px;height:36px;border-radius:50%;background:rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--accent)">1</div>
+          <div><strong style="font-size:14px">Train Models</strong><br><span style="font-size:12px;color:var(--muted)">Upload dataset to OBS → Open <code>mindspore_disease_training2.ipynb</code> on ModelArts → Run all cells → Download .ms files</span></div>
+        </div>
+        <div class="card blue" style="padding:16px;display:flex;gap:16px;align-items:center">
+          <div style="min-width:36px;height:36px;border-radius:50%;background:rgba(59,130,246,.2);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--blue)">2</div>
+          <div><strong style="font-size:14px">Start Backend</strong><br><span style="font-size:12px;color:var(--muted)"><code>cd backend/backend && pip install -r requirements.txt && uvicorn agrichain.main:app --port 8000</code></span></div>
+        </div>
+        <div class="card violet" style="padding:16px;display:flex;gap:16px;align-items:center">
+          <div style="min-width:36px;height:36px;border-radius:50%;background:rgba(139,92,246,.2);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--violet)">3</div>
+          <div><strong style="font-size:14px">Deploy Chaincode</strong><br><span style="font-size:12px;color:var(--muted)">Upload Go chaincode to Huawei BCS console → Install on peers → Instantiate with <code>InitLedger</code></span></div>
+        </div>
+        <div class="card amber" style="padding:16px;display:flex;gap:16px;align-items:center">
+          <div style="min-width:36px;height:36px;border-radius:50%;background:rgba(245,158,11,.2);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--amber)">4</div>
+          <div><strong style="font-size:14px">Run Mobile App</strong><br><span style="font-size:12px;color:var(--muted)"><code>cd agri-chain && flutter pub get && flutter run --release</code> on ARM64 Android device</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+       <div class="card" style="border-color:var(--accent);text-align:center;padding:28px">
+        <div style="font-size:48px;margin-bottom:14px">📂</div>
+        <h3 style="margin-bottom:8px">Repository Structure</h3>
+        <div style="text-align:left;font-family:'JetBrains Mono';font-size:12px;line-height:2;color:var(--muted)">
+          <span style="color:var(--accent)">/agri-chain</span> — Flutter mobile app<br>
+          <span style="color:var(--blue)">/backend</span> — Python FastAPI<br>
+          <span style="color:var(--violet)">/blockchain</span> — Chaincode (Go)<br>
+          <span style="color:var(--accent)">/mindspore_lite_flutter</span> — Plugin<br>
+          <span style="color:var(--amber)">/rover</span> — ESP32 firmware<br>
+          <span style="color:var(--muted)">*.ipynb</span> — Training notebooks<br>
+          <span style="color:var(--muted)">README.md</span> — Full instructions
+        </div>
+      </div>
+      <div class="card mt-sm" style="padding:14px;text-align:center">
+        <p style="font-size:13px"><strong style="color:var(--accent)">✅ Open Source on GitHub</strong><br>All code, models, configs, and docs included</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 13 — SDGs & DIFFERENTIATORS ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="12">
+  <div class="blob b"></div>
+  <p class="label">Differentiation & Impact</p>
+  <h2 class="mb">What Makes AgriChain Unique</h2>
+  <div class="row">
+    <div class="col">
+      <h3 style="margin-bottom:14px;color:var(--accent)">Key Differentiators</h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="card accent" style="padding:14px">
+          <p style="font-size:13px"><strong style="color:var(--text)">🥇 First MindSpore Lite Flutter Plugin</strong> — no existing solution bridges MindSpore to Flutter. We built it from scratch with JNI bindings.</p>
+        </div>
+        <div class="card accent" style="padding:14px">
+          <p style="font-size:13px"><strong style="color:var(--text)">🥇 AI → Financial Instrument Pipeline</strong> — ML prediction output directly tokenized into tradeable, collateralizable blockchain assets.</p>
+        </div>
+        <div class="card accent" style="padding:14px">
+          <p style="font-size:13px"><strong style="color:var(--text)">🥇 Hardware + Software Integration</strong> — custom ESP32 rover providing verifiable ground-truth data that feeds into the AI and blockchain layers.</p>
+        </div>
+        <div class="card accent" style="padding:14px">
+          <p style="font-size:13px"><strong style="color:var(--text)">🥇 Inclusive by Design</strong> — USSD/SMS for feature-phone farmers + full mobile app for smartphone users. Offline-first AI inference.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <h3 style="margin-bottom:14px;color:var(--blue)">UN Sustainable Development Goals</h3>
+      <div class="grid2" style="gap:12px">
+        <div class="card blue" style="padding:18px;text-align:center">
+          <div style="font-size:40px;margin-bottom:8px">🌾</div>
+          <h3 style="font-size:14px;color:var(--blue)">SDG #2</h3>
+          <p style="font-size:12px">Zero Hunger — AI-driven yield optimization and early disease detection reduces crop loss by 20%</p>
+        </div>
+        <div class="card blue" style="padding:18px;text-align:center">
+          <div style="font-size:40px;margin-bottom:8px">♻️</div>
+          <h3 style="font-size:14px;color:var(--blue)">SDG #12</h3>
+          <p style="font-size:12px">Responsible Consumption — demand-matched future contracts cut pre-market food waste by 50%</p>
+        </div>
+        <div class="card blue" style="padding:18px;text-align:center">
+          <div style="font-size:40px;margin-bottom:8px">🤝</div>
+          <h3 style="font-size:14px;color:var(--blue)">SDG #8</h3>
+          <p style="font-size:12px">Decent Work — fair prices (+30-50% income), affordable credit, community employment</p>
+        </div>
+        <div class="card blue" style="padding:18px;text-align:center">
+          <div style="font-size:40px;margin-bottom:8px">🌐</div>
+          <h3 style="font-size:14px;color:var(--blue)">SDG #9</h3>
+          <p style="font-size:12px">Industry & Innovation — AI + blockchain + IoT infrastructure for agriculture</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════ SLIDE 14 — THANK YOU ══════════════════════════════════════════════════ -->
+<section class="slide" data-slide="13">
+  <div class="blob g"></div><div class="blob b"></div>
+  <div style="text-align:center;max-width:700px;margin:0 auto">
+    <p class="label" style="margin-bottom:20px">Thank You</p>
+    <h1 style="margin-bottom:24px">Let's Transform<br><span style="color:var(--accent)">Data into Prosperity</span></h1>
+    <p style="font-size:18px;color:var(--muted);margin-bottom:32px">AgriChain: Empowering 250 million smallholder farmers with AI, blockchain, and IoT — powered by Huawei.</p>
+    
+    <div class="grid4" style="max-width:600px;margin:0 auto 32px">
+      <div class="member">
+        <div class="avatar">FJ</div>
+        <div class="name">Feta Jonathan</div>
+        <div class="role">Instructor</div>
+      </div>
+      <div class="member">
+        <div class="avatar">OE</div>
+        <div class="name">Okoo Elvis</div>
+        <div class="role">Student</div>
+      </div>
+      <div class="member">
+        <div class="avatar">WA</div>
+        <div class="name">Wasswa Atibu</div>
+        <div class="role">Student</div>
+      </div>
+      <div class="member">
+        <div class="avatar" style="background:linear-gradient(135deg,var(--accent),var(--accent2))">MA</div>
+        <div class="name">Masendi Aaron</div>
+        <div class="role">Team Captain</div>
+      </div>
+    </div>
+    
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+      <span class="tag green" style="font-size:13px;padding:6px 14px">🧠 MindSpore</span>
+      <span class="tag violet" style="font-size:13px;padding:6px 14px">🔗 Huawei BCS</span>
+      <span class="tag amber" style="font-size:13px;padding:6px 14px">🤖 IoT Rover</span>
+      <span class="tag blue" style="font-size:13px;padding:6px 14px">☁️ Huawei Cloud</span>
+    </div>
+    <p class="mt" style="font-size:14px;color:var(--muted)">Mountains of the Moon University · <span style="color:var(--accent)">masendiaaron6@gmail.com</span> · +256783876390</p>
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<div class="nav-arrows">
+  <button onclick="prevSlide()" title="Previous (←)">◀</button>
+  <button onclick="nextSlide()" title="Next (→)">▶</button>
+</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const progress = document.getElementById('progress');
+const counter = document.getElementById('counter');
+let current = 0;
+const total = slides.length;
+
+function updateSlide() {
+  slides.forEach((s, i) => {
+    s.classList.remove('active', 'prev');
+    if (i === current) s.classList.add('active');
+    else if (i < current) s.classList.add('prev');
+  });
+  progress.style.width = ((current + 1) / total * 100) + '%';
+  counter.textContent = (current + 1) + ' / ' + total;
+}
+
+function nextSlide() { if (current < total - 1) { current++; updateSlide(); } }
+function prevSlide() { if (current > 0) { current--; updateSlide(); } }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); nextSlide(); }
+  if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prevSlide(); }
+  if (e.key === 'Home') { current = 0; updateSlide(); }
+  if (e.key === 'End') { current = total - 1; updateSlide(); }
+});
+
+// Touch swipe support
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; });
+document.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].screenX - touchStartX;
+  if (dx < -50) nextSlide();
+  if (dx > 50) prevSlide();
+});
+
+updateSlide();
+</script>
+</body>
+</html>

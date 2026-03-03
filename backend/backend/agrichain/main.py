@@ -20,6 +20,7 @@ from agrichain.routers.oracle import router as oracle_router
 from agrichain.routers.insurance import router as insurance_router
 from agrichain.routers.reputation import router as reputation_router
 from agrichain.routers.ml_staking import router as ml_staking_router
+from agrichain.routers.verifier import router as verifier_router
 
 
 @asynccontextmanager
@@ -61,6 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(insurance_router)
     app.include_router(reputation_router)
     app.include_router(ml_staking_router)
+    app.include_router(verifier_router)
 
     @app.get("/health", tags=["system"])
     async def health():
@@ -68,10 +70,14 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "fabric_mode": fabric_mode,
-            "version": "2.0.0",
+            "version": "2.1.0",
             "risk_management": {
                 "layers": ["oracle", "insurance", "adjustment", "ml_staking", "reputation"],
                 "status": "active",
+            },
+            "independent_verifier": {
+                "status": "active",
+                "prefix": "/verifier",
             },
         }
 

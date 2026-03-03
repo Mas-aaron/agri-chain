@@ -140,6 +140,100 @@ def init_risk_tables() -> None:
             "CREATE INDEX IF NOT EXISTS idx_adj_asset ON token_adjustment_events (asset_id)"
         )
 
+        # ── Independent Verifier: Profiles ───────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS verifiers (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id             TEXT    NOT NULL UNIQUE,
+                organization_name   TEXT    NOT NULL,
+                organization_type   TEXT    NOT NULL DEFAULT 'INSPECTOR',
+                stake_amount        REAL    NOT NULL DEFAULT 0.0,
+                reputation_score    INTEGER NOT NULL DEFAULT 500,
+                total_submissions   INTEGER NOT NULL DEFAULT 0,
+                accuracy_rate       REAL    NOT NULL DEFAULT 0.0,
+                api_endpoint        TEXT,
+                public_key          TEXT,
+                is_active           INTEGER NOT NULL DEFAULT 1,
+                created_at          TEXT    NOT NULL,
+                last_active         TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_verifier_user ON verifiers (user_id)"
+        )
+
+        # ── Independent Verifier: Oracle Submissions ─────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS verifier_oracle_submissions (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_id            TEXT    NOT NULL,
+                verifier_id         INTEGER NOT NULL REFERENCES verifiers(id),
+                submitted_yield     REAL    NOT NULL,
+                confidence          REAL    NOT NULL DEFAULT 0.8,
+                data_source         TEXT    NOT NULL DEFAULT 'INSPECTOR',
+                measurement_method  TEXT,
+                notes               TEXT,
+                signature           TEXT,
+                ipfs_hash           TEXT,
+                status              TEXT    NOT NULL DEFAULT 'PENDING',
+                created_at          TEXT    NOT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vsub_asset ON verifier_oracle_submissions (asset_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vsub_verifier ON verifier_oracle_submissions (verifier_id)"
+        )
+
+        # ── Independent Verifier: Consensus Reports ──────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS verifier_consensus_reports (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                asset_id            TEXT    NOT NULL UNIQUE,
+                consensus_yield     REAL    NOT NULL,
+                confidence          REAL    NOT NULL,
+                submission_count    INTEGER NOT NULL,
+                ipfs_hash           TEXT    NOT NULL,
+                sources             TEXT    NOT NULL,
+                applied_to_blockchain INTEGER NOT NULL DEFAULT 0,
+                applied_tx_hash     TEXT,
+                created_at          TEXT    NOT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vcons_asset ON verifier_consensus_reports (asset_id)"
+        )
+
+        # ── Independent Verifier: Stakes ─────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS verifier_stakes (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                verifier_id     INTEGER NOT NULL REFERENCES verifiers(id),
+                amount          REAL    NOT NULL,
+                lock_until      TEXT,
+                status          TEXT    NOT NULL DEFAULT 'ACTIVE',
+                created_at      TEXT    NOT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vstake_verifier ON verifier_stakes (verifier_id)"
+        )
+
+        # ── Independent Verifier: Rewards ────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS verifier_rewards (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                verifier_id     INTEGER NOT NULL REFERENCES verifiers(id),
+                amount          REAL    NOT NULL,
+                reason          TEXT    NOT NULL DEFAULT 'SUBMISSION_FEE',
+                created_at      TEXT    NOT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_vreward_verifier ON verifier_rewards (verifier_id)"
+        )
+
 
 def get_farmer_reputation(farmer_id: str) -> Optional[dict]:
     with connect() as conn:
@@ -316,3 +410,230 @@ def get_model_season_performance(model_id: str, season: int) -> list:
             (model_id, season),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INDEPENDENT VERIFIER CRUD HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def insert_verifier(
+    user_id: str,
+    organization_name: str,
+    organization_type: str = "INSPECTOR",
+    api_endpoint: str = "",
+    public_key: str = "",
+) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO verifiers
+            (user_id, organization_name, organization_type, api_endpoint, public_key, created_at, last_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, organization_name, organization_type, api_endpoint, public_key, now, now),
+        )
+        return cur.lastrowid
+
+
+def get_verifier(verifier_id: int) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM verifiers WHERE id=?", (verifier_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_verifier_by_user_id(user_id: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM verifiers WHERE user_id=?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_verifiers(active_only: bool = True) -> list:
+    with connect() as conn:
+        if active_only:
+            rows = conn.execute("SELECT * FROM verifiers WHERE is_active=1 ORDER BY reputation_score DESC").fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM verifiers ORDER BY id DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_verifier(verifier_id: int, **kwargs) -> None:
+    if not kwargs:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    kwargs["last_active"] = now
+    set_clause = ", ".join(f"{k}=?" for k in kwargs)
+    values = list(kwargs.values()) + [verifier_id]
+    with connect() as conn:
+        conn.execute(f"UPDATE verifiers SET {set_clause} WHERE id=?", values)
+
+
+def insert_verifier_submission(
+    asset_id: str,
+    verifier_id: int,
+    submitted_yield: float,
+    confidence: float = 0.8,
+    data_source: str = "INSPECTOR",
+    measurement_method: str = "",
+    notes: str = "",
+    signature: str = "",
+    ipfs_hash: str = "",
+) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO verifier_oracle_submissions
+            (asset_id, verifier_id, submitted_yield, confidence, data_source,
+             measurement_method, notes, signature, ipfs_hash, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?)
+            """,
+            (asset_id, verifier_id, submitted_yield, confidence, data_source,
+             measurement_method, notes, signature, ipfs_hash, now),
+        )
+        # Increment total_submissions counter
+        conn.execute(
+            "UPDATE verifiers SET total_submissions = total_submissions + 1, last_active=? WHERE id=?",
+            (now, verifier_id),
+        )
+        return cur.lastrowid
+
+
+def get_submissions_for_asset(asset_id: str, status: str = "PENDING") -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM verifier_oracle_submissions WHERE asset_id=? AND status=? ORDER BY created_at",
+            (asset_id, status),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_verifier_submissions(verifier_id: int, limit: int = 50) -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM verifier_oracle_submissions WHERE verifier_id=? ORDER BY created_at DESC LIMIT ?",
+            (verifier_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_submission(submission_id: int) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM verifier_oracle_submissions WHERE id=?", (submission_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def update_submission_status(submission_ids: list, status: str) -> None:
+    if not submission_ids:
+        return
+    placeholders = ",".join("?" for _ in submission_ids)
+    with connect() as conn:
+        conn.execute(
+            f"UPDATE verifier_oracle_submissions SET status=? WHERE id IN ({placeholders})",
+            [status] + submission_ids,
+        )
+
+
+def insert_verifier_consensus(
+    asset_id: str,
+    consensus_yield: float,
+    confidence: float,
+    submission_count: int,
+    ipfs_hash: str,
+    sources: list,
+) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO verifier_consensus_reports
+            (asset_id, consensus_yield, confidence, submission_count, ipfs_hash, sources, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (asset_id, consensus_yield, confidence, submission_count,
+             ipfs_hash, json.dumps(sources), now),
+        )
+        return cur.lastrowid
+
+
+def get_verifier_consensus(asset_id: str) -> Optional[dict]:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM verifier_consensus_reports WHERE asset_id=?", (asset_id,)
+        ).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["sources"] = json.loads(d.get("sources") or "[]")
+    return d
+
+
+def list_verifier_consensus(limit: int = 50) -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM verifier_consensus_reports ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["sources"] = json.loads(d.get("sources") or "[]")
+        results.append(d)
+    return results
+
+
+def upsert_verifier_stake(verifier_id: int, amount: float, lock_until: Optional[str] = None) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO verifier_stakes (verifier_id, amount, lock_until, status, created_at)
+            VALUES (?, ?, ?, 'ACTIVE', ?)
+            """,
+            (verifier_id, amount, lock_until, now),
+        )
+        # Update aggregate on verifier profile
+        total = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM verifier_stakes WHERE verifier_id=? AND status='ACTIVE'",
+            (verifier_id,),
+        ).fetchone()[0]
+        conn.execute("UPDATE verifiers SET stake_amount=?, last_active=? WHERE id=?", (total, now, verifier_id))
+        return cur.lastrowid
+
+
+def get_verifier_stakes(verifier_id: int) -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM verifier_stakes WHERE verifier_id=? ORDER BY created_at DESC", (verifier_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def insert_verifier_reward(verifier_id: int, amount: float, reason: str = "SUBMISSION_FEE") -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    with connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO verifier_rewards (verifier_id, amount, reason, created_at) VALUES (?, ?, ?, ?)",
+            (verifier_id, amount, reason, now),
+        )
+        return cur.lastrowid
+
+
+def get_verifier_rewards(verifier_id: int, limit: int = 50) -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM verifier_rewards WHERE verifier_id=? ORDER BY created_at DESC LIMIT ?",
+            (verifier_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_verifier_total_rewards(verifier_id: int) -> float:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM verifier_rewards WHERE verifier_id=?",
+            (verifier_id,),
+        ).fetchone()
+    return row[0] if row else 0.0

@@ -314,16 +314,24 @@ void initMQTT() {
   mqttClient.setCallback(mqttCallback);
 }
 
+unsigned long lastMqttReconnect = 0;
+const unsigned long MQTT_RECONNECT_COOLDOWN = 10000; // 10s between reconnect attempts
+
 void handleMQTT() {
   if (strlen(mqttHost) == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;
 
   if (!mqttClient.connected()) {
-    ensureMqttConnected();
+    // Only attempt reconnect every 10s to avoid blocking the loop
+    if (millis() - lastMqttReconnect >= MQTT_RECONNECT_COOLDOWN) {
+      lastMqttReconnect = millis();
+      ensureMqttConnected();
+    }
+    return;  // Don't try to publish if not connected
   }
   mqttClient.loop();
 
-  if (gpsData.isValid && mqttClient.connected()) {
+  if (gpsData.isValid) {
     if (millis() - lastMqttPublish >= MQTT_PUBLISH_INTERVAL_MS) {
       publishGpsTelemetry();
       lastMqttPublish = millis();
@@ -391,7 +399,7 @@ void postSensorDataToBackend() {
   String url = String(agrichainBaseUrl) + "/sensor-data";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
+  http.setTimeout(1500);  // Reduced from 5000ms to prevent blocking BT commands
 
   // Build JSON payload
   StaticJsonDocument<384> doc;
@@ -1404,43 +1412,50 @@ uint8_t readNPKRegisterByte(uint16_t reg) {
   return 0;
 }
 
+// NPK registers to read, one per loop iteration to avoid blocking
+const uint16_t NPK_REGS[] = {REG_NITROGEN, REG_PHOSPHORUS, REG_POTASSIUM, REG_PH, REG_MOISTURE, REG_TEMP, REG_EC};
+const uint8_t NPK_REG_COUNT = 7;
+uint8_t npkRegIndex = 0;             // Which register to read next
+uint8_t npkReadBuf[7] = {0};         // Buffer for readings
+unsigned long npkLastRegRead = 0;
+const unsigned long NPK_REG_INTERVAL = 150; // ms between individual register reads
+
 void updateNPKSensor() {
-  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) {
-    return;
-  }
-  npkLastUpdate = millis();
+  // Stagger reads: read ONE register per call (~105ms max), not all 7 at once
+  if (millis() - npkLastRegRead < NPK_REG_INTERVAL) return;
+  npkLastRegRead = millis();
 
-  // Read each parameter individually (single-byte technique from working sketch)
-  uint8_t n        = readNPKRegisterByte(REG_NITROGEN);
-  uint8_t p        = readNPKRegisterByte(REG_PHOSPHORUS);
-  uint8_t k        = readNPKRegisterByte(REG_POTASSIUM);
-  uint8_t ph_raw   = readNPKRegisterByte(REG_PH);
-  uint8_t moist    = readNPKRegisterByte(REG_MOISTURE);
-  uint8_t temp_raw = readNPKRegisterByte(REG_TEMP);
-  uint8_t ec_raw   = readNPKRegisterByte(REG_EC);
+  // Read one register
+  npkReadBuf[npkRegIndex] = readNPKRegisterByte(NPK_REGS[npkRegIndex]);
+  npkRegIndex++;
 
-  npkData.nitrogen     = n;
-  npkData.phosphorus   = p;
-  npkData.potassium    = k;
-  npkData.ph           = ph_raw / 10.0f;   // e.g. 65 -> 6.5
-  npkData.moisture     = moist;
-  npkData.temperature  = temp_raw;
-  npkData.ec           = ec_raw;
-  npkData.lastReadTime = millis();
+  // Once all 7 registers have been read, update the data struct
+  if (npkRegIndex >= NPK_REG_COUNT) {
+    npkRegIndex = 0;
 
-  // Mark valid if at least one parameter is non-zero
-  npkData.isValid = (n || p || k || ph_raw || moist || temp_raw || ec_raw);
+    npkData.nitrogen     = npkReadBuf[0];
+    npkData.phosphorus   = npkReadBuf[1];
+    npkData.potassium    = npkReadBuf[2];
+    npkData.ph           = npkReadBuf[3] / 10.0f;   // e.g. 65 -> 6.5
+    npkData.moisture     = npkReadBuf[4];
+    npkData.temperature  = npkReadBuf[5];
+    npkData.ec           = npkReadBuf[6];
+    npkData.lastReadTime = millis();
 
-  if (npkData.isValid) {
-    Serial.print(F("🌱 NPK: N=")); Serial.print(npkData.nitrogen, 0);
-    Serial.print(F(" P="));        Serial.print(npkData.phosphorus, 0);
-    Serial.print(F(" K="));        Serial.print(npkData.potassium, 0);
-    Serial.print(F(" pH="));       Serial.print(npkData.ph, 1);
-    Serial.print(F(" Moist="));    Serial.print(npkData.moisture, 0);
-    Serial.print(F("% Temp="));    Serial.print(npkData.temperature, 0);
-    Serial.print(F("C EC="));      Serial.println(npkData.ec, 0);
-  } else {
-    Serial.println(F("⚠️ NPK Sensor: all readings zero (no response or sensor off)"));
+    npkData.isValid = (npkReadBuf[0] || npkReadBuf[1] || npkReadBuf[2] ||
+                       npkReadBuf[3] || npkReadBuf[4] || npkReadBuf[5] || npkReadBuf[6]);
+
+    if (npkData.isValid) {
+      Serial.print(F("🌱 NPK: N=")); Serial.print(npkData.nitrogen, 0);
+      Serial.print(F(" P="));        Serial.print(npkData.phosphorus, 0);
+      Serial.print(F(" K="));        Serial.print(npkData.potassium, 0);
+      Serial.print(F(" pH="));       Serial.print(npkData.ph, 1);
+      Serial.print(F(" Moist="));    Serial.print(npkData.moisture, 0);
+      Serial.print(F("%  Temp="));   Serial.print(npkData.temperature, 0);
+      Serial.print(F("C EC="));      Serial.println(npkData.ec, 0);
+    } else {
+      Serial.println(F("⚠️ NPK Sensor: all readings zero (no response or sensor off)"));
+    }
   }
 }
 

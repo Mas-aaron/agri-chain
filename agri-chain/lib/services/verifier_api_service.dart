@@ -7,6 +7,22 @@ import 'package:agri_chain/config/app_config.dart';
 class VerifierApiService {
   String get _base => '${AppConfig.apiBaseUrl}/verifier';
 
+  // ── Lookup by Firebase UID ────────────────────────────────────
+
+  /// Returns verifier profile if [userId] is registered, null otherwise.
+  Future<Map<String, dynamic>?> lookupByUserId(String userId) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$_base/lookup?user_id=${Uri.encodeComponent(userId)}'),
+      );
+      if (res.statusCode == 404) return null;
+      final data = _decode(res);
+      return data['verifier'] as Map<String, dynamic>?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Registration ──────────────────────────────────────────────
 
   Future<Map<String, dynamic>> register({

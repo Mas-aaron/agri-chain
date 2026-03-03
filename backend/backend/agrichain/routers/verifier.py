@@ -65,6 +65,17 @@ async def verifier_health():
     }
 
 
+@router.get("/lookup", response_model=Dict[str, Any])
+async def lookup_verifier_by_user(user_id: str = Query(...)):
+    """Lookup a verifier by their Firebase user_id. Returns the profile or 404."""
+    from agrichain.db.risk_db import get_verifier_by_user_id
+
+    verifier = get_verifier_by_user_id(user_id)
+    if not verifier:
+        raise HTTPException(status_code=404, detail="Not a verifier")
+    return {"verifier": verifier}
+
+
 @router.post("/register", response_model=Dict[str, Any])
 async def register_verifier(body: RegisterRequest):
     """Register a new independent verifier."""

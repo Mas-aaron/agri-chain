@@ -846,3 +846,285 @@ func (s *AgriYieldChaincode) CreateLoanAgreement(
 	)))
 	return nil
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INDEPENDENT VERIFIER — ON-CHAIN FUNCTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// VerifierProfile represents a registered independent verifier on-chain.
+type VerifierProfile struct {
+	VerifierID       string    `json:"verifierId"`
+	OrganizationName string    `json:"organizationName"`
+	OrganizationType string    `json:"organizationType"` // GOVERNMENT | UNIVERSITY | SATELLITE | INSPECTOR | COOPERATIVE
+	StakeAmount      float64   `json:"stakeAmount"`
+	ReputationScore  int       `json:"reputationScore"` // 0–1000
+	TotalSubmissions int       `json:"totalSubmissions"`
+	IsActive         bool      `json:"isActive"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+// VerifierSubmission records a single yield report from a verifier.
+type VerifierSubmission struct {
+	SubmissionID   string    `json:"submissionId"`
+	AssetID        string    `json:"assetId"`
+	VerifierID     string    `json:"verifierId"`
+	SubmittedYield float64   `json:"submittedYield"`
+	Confidence     float64   `json:"confidence"`
+	DataSource     string    `json:"dataSource"`
+	Status         string    `json:"status"` // PENDING | ACCEPTED | REJECTED
+	SubmittedAt    time.Time `json:"submittedAt"`
+}
+
+// VerifierConsensus stores the final consensus formed from multiple verifier submissions.
+type VerifierConsensus struct {
+	ConsensusID     string    `json:"consensusId"`
+	AssetID         string    `json:"assetId"`
+	ConsensusYield  float64   `json:"consensusYield"`
+	Confidence      float64   `json:"confidence"`
+	SubmissionCount int       `json:"submissionCount"`
+	IPFSHash        string    `json:"ipfsHash"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+// verifierKey returns the ledger key for a VerifierProfile.
+func verifierKey(verifierId string) string { return "VERIFIER_" + verifierId }
+
+// verifierSubKey returns the ledger key for a VerifierSubmission.
+func verifierSubKey(submissionId string) string { return "VSUB_" + submissionId }
+
+// verifierConsensusKey returns the ledger key for a VerifierConsensus.
+func verifierConsensusKey(assetId string) string { return "VCONS_" + assetId }
+
+// verifierStakeKey returns the ledger key for verifier staked tokens.
+func verifierStakeKey(verifierId string) string { return "VSTAKE_" + verifierId }
+
+// RegisterVerifier creates a new verifier profile on the ledger.
+// Parameters: verifierId, organizationName, organizationType
+func (s *AgriYieldChaincode) RegisterVerifier(
+	ctx contractapi.TransactionContextInterface,
+	verifierId string,
+	organizationName string,
+	organizationType string,
+) error {
+	key := verifierKey(verifierId)
+	existing, _ := ctx.GetStub().GetState(key)
+	if existing != nil {
+		return fmt.Errorf("verifier %s already registered", verifierId)
+	}
+
+	profile := VerifierProfile{
+		VerifierID:       verifierId,
+		OrganizationName: organizationName,
+		OrganizationType: organizationType,
+		StakeAmount:      0,
+		ReputationScore:  500,
+		TotalSubmissions: 0,
+		IsActive:         true,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		return err
+	}
+	if err := ctx.GetStub().PutState(key, profileJSON); err != nil {
+		return fmt.Errorf("failed to save verifier: %v", err)
+	}
+
+	_ = ctx.GetStub().SetEvent("VerifierRegistered", []byte(fmt.Sprintf(
+		`{"verifierId":"%s","organizationName":"%s","organizationType":"%s"}`,
+		verifierId, organizationName, organizationType,
+	)))
+	return nil
+}
+
+// GetVerifier retrieves a verifier profile from the ledger.
+func (s *AgriYieldChaincode) GetVerifier(
+	ctx contractapi.TransactionContextInterface,
+	verifierId string,
+) (*VerifierProfile, error) {
+	data, err := ctx.GetStub().GetState(verifierKey(verifierId))
+	if err != nil {
+		return nil, err
+	}
+	if data == nil {
+		return nil, fmt.Errorf("verifier %s not found", verifierId)
+	}
+	var profile VerifierProfile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// SubmitVerifierReport records a yield report from a verifier on-chain.
+// Parameters: submissionId, assetId, verifierId, submittedYield, confidence, dataSource
+func (s *AgriYieldChaincode) SubmitVerifierReport(
+	ctx contractapi.TransactionContextInterface,
+	submissionId string,
+	assetId string,
+	verifierId string,
+	submittedYieldStr string,
+	confidenceStr string,
+	dataSource string,
+) error {
+	yieldVal, err := strconv.ParseFloat(submittedYieldStr, 64)
+	if err != nil || yieldVal < 0 {
+		return fmt.Errorf("invalid submittedYield: %s", submittedYieldStr)
+	}
+	conf, err := strconv.ParseFloat(confidenceStr, 64)
+	if err != nil {
+		return fmt.Errorf("invalid confidence: %s", confidenceStr)
+	}
+
+	// Verify the verifier exists and is active
+	vProfile, err := s.GetVerifier(ctx, verifierId)
+	if err != nil {
+		return fmt.Errorf("verifier not found: %v", err)
+	}
+	if !vProfile.IsActive {
+		return fmt.Errorf("verifier %s is suspended", verifierId)
+	}
+
+	sub := VerifierSubmission{
+		SubmissionID:   submissionId,
+		AssetID:        assetId,
+		VerifierID:     verifierId,
+		SubmittedYield: yieldVal,
+		Confidence:     conf,
+		DataSource:     dataSource,
+		Status:         "PENDING",
+		SubmittedAt:    time.Now(),
+	}
+
+	subJSON, _ := json.Marshal(sub)
+	if err := ctx.GetStub().PutState(verifierSubKey(submissionId), subJSON); err != nil {
+		return err
+	}
+
+	// Update verifier submission count
+	vProfile.TotalSubmissions++
+	vProfile.UpdatedAt = time.Now()
+	vpJSON, _ := json.Marshal(vProfile)
+	_ = ctx.GetStub().PutState(verifierKey(verifierId), vpJSON)
+
+	_ = ctx.GetStub().SetEvent("VerifierReportSubmitted", []byte(fmt.Sprintf(
+		`{"submissionId":"%s","assetId":"%s","verifierId":"%s","yield":%f,"confidence":%f}`,
+		submissionId, assetId, verifierId, yieldVal, conf,
+	)))
+	return nil
+}
+
+// RecordVerifierConsensus stores the final consensus from verifier submissions on-chain.
+// Called by the backend after the weighted-median consensus is computed off-chain.
+// Parameters: consensusId, assetId, consensusYield, confidence, submissionCount, ipfsHash
+func (s *AgriYieldChaincode) RecordVerifierConsensus(
+	ctx contractapi.TransactionContextInterface,
+	consensusId string,
+	assetId string,
+	consensusYieldStr string,
+	confidenceStr string,
+	submissionCountStr string,
+	ipfsHash string,
+) error {
+	consensusYield, err := strconv.ParseFloat(consensusYieldStr, 64)
+	if err != nil {
+		return fmt.Errorf("invalid consensusYield: %s", consensusYieldStr)
+	}
+	confidence, err := strconv.ParseFloat(confidenceStr, 64)
+	if err != nil {
+		return fmt.Errorf("invalid confidence: %s", confidenceStr)
+	}
+	submissionCount, err := strconv.Atoi(submissionCountStr)
+	if err != nil {
+		return fmt.Errorf("invalid submissionCount: %s", submissionCountStr)
+	}
+
+	consensus := VerifierConsensus{
+		ConsensusID:     consensusId,
+		AssetID:         assetId,
+		ConsensusYield:  consensusYield,
+		Confidence:      confidence,
+		SubmissionCount: submissionCount,
+		IPFSHash:        ipfsHash,
+		CreatedAt:       time.Now(),
+	}
+
+	consJSON, _ := json.Marshal(consensus)
+	if err := ctx.GetStub().PutState(verifierConsensusKey(assetId), consJSON); err != nil {
+		return err
+	}
+
+	_ = ctx.GetStub().SetEvent("VerifierConsensusRecorded", []byte(fmt.Sprintf(
+		`{"consensusId":"%s","assetId":"%s","consensusYield":%f,"confidence":%f,"submissions":%d,"ipfsHash":"%s"}`,
+		consensusId, assetId, consensusYield, confidence, submissionCount, ipfsHash,
+	)))
+	return nil
+}
+
+// GetVerifierConsensus retrieves the consensus report for an asset.
+func (s *AgriYieldChaincode) GetVerifierConsensus(
+	ctx contractapi.TransactionContextInterface,
+	assetId string,
+) (*VerifierConsensus, error) {
+	data, err := ctx.GetStub().GetState(verifierConsensusKey(assetId))
+	if err != nil || data == nil {
+		return nil, fmt.Errorf("no verifier consensus for asset %s", assetId)
+	}
+	var consensus VerifierConsensus
+	if err := json.Unmarshal(data, &consensus); err != nil {
+		return nil, err
+	}
+	return &consensus, nil
+}
+
+// StakeVerifierTokens locks tokens as a verifier stake to increase voting weight.
+// Parameters: verifierId, amount
+func (s *AgriYieldChaincode) StakeVerifierTokens(
+	ctx contractapi.TransactionContextInterface,
+	verifierId string,
+	amountStr string,
+) error {
+	amount, err := strconv.ParseFloat(amountStr, 64)
+	if err != nil || amount <= 0 {
+		return fmt.Errorf("invalid stake amount: %s", amountStr)
+	}
+
+	// Update verifier profile stake
+	vProfile, err := s.GetVerifier(ctx, verifierId)
+	if err != nil {
+		return fmt.Errorf("verifier not found: %v", err)
+	}
+
+	vProfile.StakeAmount += amount
+	vProfile.UpdatedAt = time.Now()
+	vpJSON, _ := json.Marshal(vProfile)
+	if err := ctx.GetStub().PutState(verifierKey(verifierId), vpJSON); err != nil {
+		return err
+	}
+
+	// Store individual stake record
+	stakeData := fmt.Sprintf(`{"verifierId":"%s","stakeAmount":%f,"totalStake":%f,"stakedAt":"%s"}`,
+		verifierId, amount, vProfile.StakeAmount, time.Now().Format(time.RFC3339))
+	_ = ctx.GetStub().PutState(verifierStakeKey(verifierId), []byte(stakeData))
+
+	_ = ctx.GetStub().SetEvent("VerifierStaked", []byte(fmt.Sprintf(
+		`{"verifierId":"%s","amount":%f,"totalStake":%f}`,
+		verifierId, amount, vProfile.StakeAmount,
+	)))
+	return nil
+}
+
+// GetVerifierStake returns the current stake info for a verifier.
+func (s *AgriYieldChaincode) GetVerifierStake(
+	ctx contractapi.TransactionContextInterface,
+	verifierId string,
+) (string, error) {
+	data, err := ctx.GetStub().GetState(verifierStakeKey(verifierId))
+	if err != nil || data == nil {
+		return "", fmt.Errorf("no stake found for verifier %s", verifierId)
+	}
+	return string(data), nil
+}

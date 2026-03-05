@@ -232,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String?>(
-                            initialValue: effectiveSelectedFieldId,
+                            value: effectiveSelectedFieldId,
                             items: items,
                             decoration: const InputDecoration(
                               labelText: 'Selected field (optional)',
@@ -257,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<CropModel>(
-                        initialValue: _cropModel,
+                        value: _cropModel,
                         decoration: const InputDecoration(
                           labelText: 'Crop model',
                         ),

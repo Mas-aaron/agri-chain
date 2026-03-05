@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'agrochemicals_screen.dart';
 import 'suppliers_screen.dart';
+import 'verifier_management_screen.dart';
 
 class AdminDashboardScreen extends StatelessWidget {
   const AdminDashboardScreen({super.key});
@@ -51,6 +52,20 @@ class AdminDashboardScreen extends StatelessWidget {
             },
           ),
         ),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.verified_user_outlined, color: Colors.deepPurple),
+            title: const Text('Verifier Management'),
+            subtitle: const Text('Monitor and manage independent verifiers'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const VerifierManagementScreen()),
+              );
+            },
+          ),
+        ),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
@@ -65,3 +80,4 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 }
+

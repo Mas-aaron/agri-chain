@@ -10,6 +10,7 @@ import 'package:agri_chain/firebase_bootstrap.dart';
 import 'package:agri_chain/rover/providers/rover_provider.dart';
 import 'package:agri_chain/services/auth_service.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
+import 'package:agri_chain/providers/verifier_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +36,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AlertsProvider()),
         ChangeNotifierProvider(create: (_) => BlockchainProvider()),
         ChangeNotifierProvider(create: (_) => RoverProvider()),
+        ChangeNotifierProvider(create: (_) => VerifierProvider()),
       ],
       child: const MaizeDetectorApp(),
     ),

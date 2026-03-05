@@ -343,19 +343,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             DiseaseCard(
-              diseaseName: 'Coffee Berry Disease',
+              diseaseName: 'Phoma',
               severity: 'High',
               color: Colors.red,
               icon: Icons.bug_report_outlined,
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
-              ),
-            ),
-            DiseaseCard(
-              diseaseName: 'Cercospora Leaf Spot',
-              severity: 'Medium',
-              color: Colors.blue,
-              icon: Icons.grain_outlined,
               onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
               ),

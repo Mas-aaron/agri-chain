@@ -291,6 +291,26 @@ async def pesapal_ipn(
                     },
                 )
 
+                # ── SMS notification to farmer ─────────────────────
+                try:
+                    contract_row = conn.execute(
+                        "SELECT farmer_phone, currency FROM contracts WHERE id=?",
+                        (row["contract_id"],),
+                    ).fetchone()
+                    if contract_row and contract_row["farmer_phone"]:
+                        from agrichain.services.sms_service import notify_payment_completed
+                        import asyncio
+                        amount_str = f"{row['amount']:.0f} {contract_row['currency']}"
+                        asyncio.ensure_future(notify_payment_completed(
+                            farmer_phone=contract_row["farmer_phone"],
+                            contract_id=row["contract_id"],
+                            amount=amount_str,
+                            reference=confirmation_code or row["payment_id"],
+                        ))
+                except Exception as e:
+                    import logging
+                    logging.getLogger("agrichain.payments").warning(f"SMS notification failed: {e}")
+
     return {
         "orderNotificationType": "CHANGE",
         "orderTrackingId": OrderTrackingId,

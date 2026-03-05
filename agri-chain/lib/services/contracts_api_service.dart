@@ -9,6 +9,7 @@ class ContractCreateRequest {
   final double unitPrice;
   final String currency;
   final String farmerName;
+  final String? farmerPhone;
   final String? evidenceHash;
 
   const ContractCreateRequest({
@@ -17,6 +18,7 @@ class ContractCreateRequest {
     required this.unitPrice,
     this.currency = 'UGX',
     required this.farmerName,
+    this.farmerPhone,
     this.evidenceHash,
   });
 
@@ -26,6 +28,7 @@ class ContractCreateRequest {
         'unit_price': unitPrice,
         'currency': currency,
         'farmer_name': farmerName,
+        if (farmerPhone != null) 'farmer_phone': farmerPhone,
         if (evidenceHash != null) 'evidence_hash': evidenceHash,
       };
 }
@@ -60,6 +63,7 @@ class YieldContractDto {
   final String currency;
   final String status;
   final String farmerName;
+  final String? farmerPhone;
   final String? buyerName;
   final String? evidenceHash;
   final DateTime createdAt;
@@ -72,6 +76,7 @@ class YieldContractDto {
     required this.currency,
     required this.status,
     required this.farmerName,
+    this.farmerPhone,
     required this.buyerName,
     required this.evidenceHash,
     required this.createdAt,
@@ -87,6 +92,7 @@ class YieldContractDto {
         'currency': currency,
         'status': status,
         'farmer_name': farmerName,
+        if (farmerPhone != null) 'farmer_phone': farmerPhone,
         if (buyerName != null) 'buyer_name': buyerName,
         if (evidenceHash != null) 'evidence_hash': evidenceHash,
         'created_at': createdAt.toIso8601String(),
@@ -106,6 +112,7 @@ class YieldContractDto {
       currency: (json['currency'] ?? '').toString(),
       status: (json['status'] ?? '').toString(),
       farmerName: (json['farmer_name'] ?? '').toString(),
+      farmerPhone: json['farmer_phone'] == null ? null : (json['farmer_phone']).toString(),
       buyerName: json['buyer_name'] == null ? null : (json['buyer_name']).toString(),
       evidenceHash: json['evidence_hash'] == null ? null : (json['evidence_hash']).toString(),
       createdAt: DateTime.tryParse('$createdRaw') ?? DateTime.now(),

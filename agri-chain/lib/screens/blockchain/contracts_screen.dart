@@ -76,30 +76,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
           IconButton(
             tooltip: 'Create contract (Farmer demo)',
             icon: const Icon(Icons.add_circle_outline),
-            onPressed: () async {
-              try {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Not signed in')));
-                  return;
-                }
-                await _api.createContract(
-                  ContractCreateRequest(
-                    crop: 'Maize',
-                    quantityKg: 1000,
-                    unitPrice: 1200,
-                    currency: 'UGX',
-                    farmerName: user.uid,
-                  ),
-                );
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Contract created')));
-                _reload();
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Create failed: $e')));
-              }
-            },
+            onPressed: () => _showCreateContractDialog(),
           ),
         ],
       ),
@@ -335,6 +312,154 @@ class _ContractsScreenState extends State<ContractsScreen> {
         Text(v, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
       ],
     );
+  }
+
+  Future<void> _showCreateContractDialog() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Not signed in')));
+      }
+      return;
+    }
+
+    final cropCtrl = TextEditingController(text: 'Maize');
+    final qtyCtrl = TextEditingController(text: '1000');
+    final priceCtrl = TextEditingController(text: '1200');
+    final phoneCtrl = TextEditingController();
+    bool submitting = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(children: [
+            Icon(Icons.add_circle_outline, color: scheme.primary),
+            const SizedBox(width: 8),
+            const Text('Create Contract'),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: cropCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Crop',
+                    prefixIcon: Icon(Icons.grass),
+                    hintText: 'e.g. Maize, Coffee',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: qtyCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity (kg)',
+                    prefixIcon: Icon(Icons.scale),
+                    hintText: 'e.g. 1000',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priceCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Unit Price (UGX)',
+                    prefixIcon: Icon(Icons.payments_outlined),
+                    hintText: 'e.g. 1200',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number (for SMS alerts)',
+                    prefixIcon: Icon(Icons.phone),
+                    hintText: 'e.g. +256700123456',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'You will receive SMS notifications when someone purchases this contract.',
+                        style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      setS(() => submitting = true);
+                      try {
+                        final qty = double.tryParse(qtyCtrl.text.trim()) ?? 0;
+                        final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
+                        if (qty <= 0 || price <= 0) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(content: Text('Enter valid quantity and price')),
+                          );
+                          setS(() => submitting = false);
+                          return;
+                        }
+                        await _api.createContract(
+                          ContractCreateRequest(
+                            crop: cropCtrl.text.trim().isEmpty ? 'Maize' : cropCtrl.text.trim(),
+                            quantityKg: qty,
+                            unitPrice: price,
+                            currency: 'UGX',
+                            farmerName: user.uid,
+                            farmerPhone: phoneCtrl.text.trim().isEmpty ? null : phoneCtrl.text.trim(),
+                          ),
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx, true);
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text('Create failed: $e')),
+                          );
+                        }
+                      } finally {
+                        setS(() => submitting = false);
+                      }
+                    },
+              icon: submitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.check, size: 18),
+              label: Text(submitting ? 'Creating…' : 'Create Contract'),
+            ),
+          ],
+        );
+      }),
+    );
+
+    if (confirmed == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Contract created successfully!')),
+      );
+      _reload();
+    }
   }
 
   Future<void> _showDeliverDialog(YieldContractDto contract) async {

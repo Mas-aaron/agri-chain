@@ -132,8 +132,33 @@ async def execute_trade(payload: TradeRequest):
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    trade_id = f"TR-{uuid.uuid4().hex[:10].upper()}"
+
+    # ── SMS notification to farmer ────────────────────────────────
+    farmer_id = asset.get("farmerId", "")
+    if farmer_id:
+        try:
+            from agrichain.db.sqlite import connect as _db_connect
+            from agrichain.services.sms_service import notify_token_traded
+            with _db_connect() as conn:
+                row = conn.execute(
+                    "SELECT farmer_phone FROM contracts WHERE farmer_name=? AND farmer_phone IS NOT NULL LIMIT 1",
+                    (farmer_id,),
+                ).fetchone()
+            if row and row["farmer_phone"]:
+                await notify_token_traded(
+                    farmer_phone=row["farmer_phone"],
+                    asset_id=payload.assetId,
+                    trade_id=trade_id,
+                    amount=payload.amount,
+                    trade_type=trade_type,
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger("agrichain.blockchain").warning(f"SMS notification failed: {e}")
+
     return {
-        "tradeId": f"TR-{uuid.uuid4().hex[:10].upper()}",
+        "tradeId": trade_id,
         "assetId": payload.assetId,
         "amount": payload.amount,
         "tradeType": trade_type,

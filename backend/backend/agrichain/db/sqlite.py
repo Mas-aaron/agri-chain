@@ -31,6 +31,7 @@ def init_db() -> None:
                 currency TEXT NOT NULL,
                 status TEXT NOT NULL,
                 farmer_name TEXT NOT NULL,
+                farmer_phone TEXT,
                 buyer_name TEXT,
                 evidence_hash TEXT,
                 created_at TEXT NOT NULL,
@@ -38,6 +39,11 @@ def init_db() -> None:
             )
             """
         )
+        # Migration: add farmer_phone column to existing databases
+        try:
+            conn.execute("ALTER TABLE contracts ADD COLUMN farmer_phone TEXT")
+        except Exception:
+            pass  # Column already exists
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS rover_sessions (

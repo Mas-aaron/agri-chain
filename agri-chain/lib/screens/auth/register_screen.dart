@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:agri_chain/services/auth_service.dart';
@@ -48,11 +49,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await context.read<AuthService>().registerWithEmail(email, pass);
 
       if (_selectedRole == 'Verifier') {
-        // Register as verifier and navigate to verifier dashboard
+        // Register as verifier using the real Firebase UID so _RoleRouter
+        // can find this record on subsequent logins.
         if (!mounted) return;
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) throw Exception('Authentication failed. Please try again.');
         final verifierProv = context.read<VerifierProvider>();
         await verifierProv.register(
-          userId: email,
+          userId: uid,
           organizationName: _orgNameCtl.text.trim(),
           organizationType: 'INSPECTOR',
         );

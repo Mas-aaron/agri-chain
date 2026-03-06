@@ -5,9 +5,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:agri_chain/services/auth_service.dart';
 import 'package:agri_chain/home_screen.dart';
 import 'package:agri_chain/screens/auth/register_screen.dart';
-import 'package:agri_chain/widgets/modern_ui.dart';
-import 'package:agri_chain/providers/verifier_provider.dart';
-import 'package:agri_chain/screens/verifier/verifier_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -55,32 +52,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _continueAsVerifier() async {
-    setState(() => _isLoading = true);
-    try {
-      final prov = context.read<VerifierProvider>();
-      await prov.register(
-        userId: 'demo-verifier-001',
-        organizationName: 'Demo Inspector',
-        organizationType: 'INSPECTOR',
-      );
-      if (!mounted) return;
-      await prov.loadDashboardData();
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const VerifierDashboard()),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -185,13 +156,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: EdgeInsets.symmetric(vertical: 16),
                       child: Divider(),
                     ),
-                    
+
                     Text('Need to quickly scan a leaf offline?', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        // Embedded mode tells HomeScreen to not show the AppShell bottom navigation if it's running standalone
                         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HomeScreen(embedded: false))),
                         icon: const Icon(Icons.camera_alt_outlined),
                         label: const Text('Continue as Guest Scanner'),
@@ -200,18 +170,27 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _continueAsVerifier,
-                        icon: const Icon(Icons.verified_user_outlined),
-                        label: const Text('Continue as Verifier'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          foregroundColor: Colors.deepPurple,
-                          side: const BorderSide(color: Colors.deepPurple),
-                        ),
+                    const SizedBox(height: 16),
+
+                    // Verifier guidance — no bypass, must sign in with registered account
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.deepPurple.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_user_outlined, color: Colors.deepPurple, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Independent Verifiers: sign in above with your registered account.',
+                              style: TextStyle(color: Colors.deepPurple.shade700, fontSize: 12, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],

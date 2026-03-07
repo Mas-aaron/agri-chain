@@ -5,37 +5,39 @@ import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/screens/rover/field_map_screen.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 class FieldsTab extends StatelessWidget {
   const FieldsTab({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final provider = context.watch<FieldsProvider>();
     final fields = provider.fields;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Fields')),
+      appBar: AppBar(title: Text(s.fields)),
       body: FutureBuilder<void>(
         future: context.read<FieldsProvider>().ensureLoaded(),
         builder: (context, snapshot) {
           return ListView(
             padding: const EdgeInsets.all(16),
           children: [
-            const ImageHeroCard(
+            ImageHeroCard(
               imageUrl: 'https://images.unsplash.com/photo-1595847321528-766cf018aeb5?w=800&q=80',
-              title: 'Your fields',
+              title: s.fields,
               subtitle: 'Track each plot, monitor location, and link alerts to fields.',
             ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Fields', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                Text(s.fields, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
                 FilledButton.icon(
                   onPressed: () => _openEditor(context),
                   icon: const Icon(Icons.add),
-                  label: const Text('Add'),
+                  label: Text(s.addField),
                 ),
               ],
             ),
@@ -45,7 +47,7 @@ class FieldsTab extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    'No fields yet. Add your first field to track health and alerts.',
+                    s.noFieldsYet,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -349,13 +351,6 @@ class FieldDetailScreen extends StatelessWidget {
                 ],
               );
             },
-          ),
-          const SizedBox(height: 12),
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Field health history (placeholder).'),
-            ),
           ),
         ],
       ),

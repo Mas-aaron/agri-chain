@@ -12,6 +12,7 @@ import 'package:agri_chain/screens/blockchain/ledger_screen.dart';
 import 'package:agri_chain/screens/blockchain/token_marketplace_screen.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
 import 'package:agri_chain/screens/blockchain/loans_screen.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -23,18 +24,17 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  // All pages accessible from both mobile and web
-  static const _navItems = <_NavItem>[
-    _NavItem(icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: 'Dashboard'),        // 0
-    _NavItem(icon: Icons.auto_graph_outlined, selectedIcon: Icons.auto_graph, label: 'Yield Forecast'), // 1
-    _NavItem(icon: Icons.token_outlined, selectedIcon: Icons.token, label: 'Token Market'),             // 2
-    _NavItem(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: 'Contracts'),      // 3
-    _NavItem(icon: Icons.receipt_long_outlined, selectedIcon: Icons.receipt_long, label: 'Ledger'),     // 4
-    _NavItem(icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: 'Loans'),// 5
-    _NavItem(icon: Icons.camera_alt_outlined, selectedIcon: Icons.camera_alt, label: 'Disease Scan'),   // 6
-    _NavItem(icon: Icons.map_outlined, selectedIcon: Icons.map, label: 'Fields'),                       // 7
-    _NavItem(icon: Icons.notifications_outlined, selectedIcon: Icons.notifications, label: 'Alerts'),   // 8
-    _NavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'Settings'),           // 9
+  List<_NavItem> _navItems(AppStrings s) => [
+    _NavItem(icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: s.navDashboard),
+    _NavItem(icon: Icons.auto_graph_outlined, selectedIcon: Icons.auto_graph, label: s.navYieldForecast),
+    _NavItem(icon: Icons.token_outlined, selectedIcon: Icons.token, label: s.navTokenMarket),
+    _NavItem(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: s.navContracts),
+    _NavItem(icon: Icons.receipt_long_outlined, selectedIcon: Icons.receipt_long, label: s.navLedger),
+    _NavItem(icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: s.navLoans),
+    _NavItem(icon: Icons.camera_alt_outlined, selectedIcon: Icons.camera_alt, label: s.navDiseaseScan),
+    _NavItem(icon: Icons.map_outlined, selectedIcon: Icons.map, label: s.navFields),
+    _NavItem(icon: Icons.notifications_outlined, selectedIcon: Icons.notifications, label: s.navAlerts),
+    _NavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: s.navSettings),
   ];
 
   Widget _pageAt(int i) {
@@ -66,6 +66,8 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+    final navItems = _navItems(s);
     final width = MediaQuery.of(context).size.width;
     final isWide = width >= 900;
 
@@ -73,7 +75,7 @@ class _AppShellState extends State<AppShell> {
       return _WebLayout(
         index: _index,
         onChanged: (i) => setState(() => _index = i),
-        items: _navItems,
+        items: navItems,
         child: _pageAt(_index),
       );
     }
@@ -90,9 +92,9 @@ class _AppShellState extends State<AppShell> {
         destinations: [
           for (final idx in mobileIndices)
             NavigationDestination(
-              icon: Icon(_navItems[idx].icon),
-              selectedIcon: Icon(_navItems[idx].selectedIcon),
-              label: _navItems[idx].label,
+              icon: Icon(navItems[idx].icon),
+              selectedIcon: Icon(navItems[idx].selectedIcon),
+              label: navItems[idx].label,
             ),
         ],
       ),

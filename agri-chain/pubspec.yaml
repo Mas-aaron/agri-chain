@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   cupertino_icons: ^1.0.8
   web_socket_channel: ^2.4.0
   flutter_bluetooth_serial: ^0.4.0
@@ -78,6 +81,7 @@ flutter_icons:
   min_sdk_android: 21
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     # - assets/models/

@@ -411,3 +411,56 @@ async def list_payments(contract_id: Optional[str] = None):
                 "SELECT * FROM payments ORDER BY created_at DESC"
             ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Payout Endpoints ─────────────────────────────────────────────────────────
+
+@router.get("/payouts")
+async def list_payouts(contract_id: Optional[str] = None):
+    """
+    List payouts. If contract_id is provided, filter by contract.
+    Otherwise returns all pending payouts.
+    """
+    from agrichain.services.payout_service import (
+        list_payouts_for_contract,
+        list_pending_payouts,
+    )
+
+    if contract_id:
+        return {"payouts": list_payouts_for_contract(contract_id)}
+    return {"payouts": list_pending_payouts()}
+
+
+@router.get("/payouts/{payout_id}")
+async def get_payout_detail(payout_id: str):
+    """Get details for a specific payout."""
+    from agrichain.services.payout_service import get_payout
+    payout = get_payout(payout_id)
+    if not payout:
+        raise HTTPException(status_code=404, detail="Payout not found")
+    return payout
+
+
+class ProcessPayoutRequest(BaseModel):
+    disbursement_method: str = Field(default="MOBILE_MONEY", description="MOBILE_MONEY | BANK_TRANSFER | MANUAL")
+    disbursement_ref: str = Field(default="", description="External reference (e.g. MoMo transaction ID)")
+
+
+@router.post("/payouts/{payout_id}/process")
+async def process_payout_endpoint(payout_id: str, req: ProcessPayoutRequest):
+    """
+    Mark a payout as disbursed. In production, this would trigger
+    MTN MoMo API or PesaPal Openfloat. For now it records the
+    disbursement method and reference.
+    """
+    from agrichain.services.payout_service import process_payout
+    try:
+        result = process_payout(
+            payout_id=payout_id,
+            disbursement_method=req.disbursement_method,
+            disbursement_ref=req.disbursement_ref,
+        )
+        return {"status": "success", "payout": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

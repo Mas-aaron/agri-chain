@@ -14,7 +14,7 @@ class VerifierApiService {
     try {
       final res = await http.get(
         Uri.parse('$_base/lookup?user_id=${Uri.encodeComponent(userId)}'),
-      );
+      ).timeout(const Duration(seconds: 5));
       if (res.statusCode == 404) return null;
       final data = _decode(res);
       return data['verifier'] as Map<String, dynamic>?;

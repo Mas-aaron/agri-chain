@@ -63,6 +63,7 @@ class _ContractsScreenState extends State<ContractsScreen> {
     final s = status.toLowerCase();
     if (s.contains('listed')) return Theme.of(context).colorScheme.primary;
     if (s.contains('purchased')) return Colors.orange;
+    if (s.contains('verified')) return Colors.green;
     if (s.contains('delivered')) return Colors.blue;
     return Theme.of(context).colorScheme.onSurface;
   }
@@ -235,6 +236,8 @@ class _ContractsScreenState extends State<ContractsScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
+                        if (c.status.toUpperCase() == 'VERIFIED')
+                          _PayoutStatusRow(contractId: c.id, api: _api),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
@@ -911,3 +914,97 @@ class _ContractsScreenState extends State<ContractsScreen> {
     return r;
   }
 }
+
+class _PayoutStatusRow extends StatelessWidget {
+  final String contractId;
+  final ContractsApiService api;
+
+  const _PayoutStatusRow({required this.contractId, required this.api});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<PayoutDto>>(
+      future: api.fetchPayouts(contractId),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(),
+          );
+        }
+
+        final payouts = snap.data;
+        if (payouts == null || payouts.isEmpty) return const SizedBox.shrink();
+
+        final p = payouts.first;
+        final isDisbursed = p.status == 'DISBURSED';
+        final statusColor = isDisbursed ? Colors.green : Colors.amber.shade800;
+        final statusLabel = isDisbursed ? 'Paid Out' : 'Pending Payout';
+        final icon = isDisbursed ? Icons.check_circle : Icons.schedule;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: statusColor.withOpacity(0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: statusColor, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Farmer Payout',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: statusColor,
+                        ),
+                      ),
+                      Text(
+                        '${_formatAmount(p.amount)} ${p.currency}',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _formatAmount(double amount) {
+    if (amount >= 1000000) {
+      return '${(amount / 1000000).toStringAsFixed(1)}M';
+    }
+    if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(0)},${(amount % 1000).toStringAsFixed(0).padLeft(3, '0')}';
+    }
+    return amount.toStringAsFixed(0);
+  }
+}
+

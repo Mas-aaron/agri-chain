@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +6,7 @@ import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/widgets/confidence_bar.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/services/mindspore_service.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 class ResultsScreen extends StatelessWidget {
   final File imageFile;
@@ -44,6 +45,7 @@ class ResultsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final topPrediction = predictions.first;
     final rec = RecommendationService.recommendForLabel((topPrediction['label'] as String?) ?? '');
     final isHealthy = rec.isHealthy || _isCoffeeHealthy(topPrediction['label']);
@@ -52,7 +54,7 @@ class ResultsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Results'),
+        title: Text(s.results),
         actions: [
           IconButton(
             onPressed: () => _shareResults(context),
@@ -70,27 +72,27 @@ class ResultsScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Diagnosis Card
-            _buildDiagnosisCard(isHealthy, isNonMaize, topPrediction),
+            _buildDiagnosisCard(context, s, isHealthy, isNonMaize, topPrediction),
             const SizedBox(height: 24),
 
             // Confidence Bars
-            _buildConfidenceSection(),
+            _buildConfidenceSection(s),
             const SizedBox(height: 24),
 
             // Treatment Advice
-            _buildTreatmentAdvice(topPrediction['label']),
+            _buildTreatmentAdvice(context, s, topPrediction['label']),
             const SizedBox(height: 24),
 
             // Recommendations
-            _buildRecommendations(context, rec),
+            _buildRecommendations(context, s, rec),
             const SizedBox(height: 24),
 
             // Stats
-            _buildStatsSection(),
+            _buildStatsSection(s),
           ],
         ),
       ),
-      bottomNavigationBar: _buildActionButtons(context),
+      bottomNavigationBar: _buildActionButtons(context, s),
     );
   }
 
@@ -116,6 +118,8 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Widget _buildDiagnosisCard(
+    BuildContext context,
+    AppStrings s,
     bool isHealthy,
     bool isNonMaize,
     Map<String, dynamic> prediction,
@@ -125,8 +129,8 @@ class ResultsScreen extends StatelessWidget {
     final display = _displayLabel(label);
 
     final header = isNonMaize
-        ? 'Scan not recognized'
-        : (isHealthy ? 'Healthy Leaf' : 'Disease detected');
+        ? s.scanNotRecognized
+        : (isHealthy ? s.healthyLeaf : s.diseaseDetected2);
 
     final icon = isNonMaize
         ? Icons.info_outline
@@ -184,7 +188,7 @@ class ResultsScreen extends StatelessWidget {
                   ] else ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Confidence: ${percentage.toStringAsFixed(1)}%',
+                    '${s.confidenceLabel}: ${percentage.toStringAsFixed(1)}%',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -200,13 +204,13 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildConfidenceSection() {
+  Widget _buildConfidenceSection(AppStrings s) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Confidence Breakdown',
-          style: TextStyle(
+        Text(
+          s.confidenceBreakdown,
+          style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -223,7 +227,7 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTreatmentAdvice(String disease) {
+  Widget _buildTreatmentAdvice(BuildContext context, AppStrings s, String disease) {
     final advice = _getTreatmentAdvice(disease);
 
     return Card(
@@ -232,13 +236,13 @@ class ResultsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.medical_services, color: Colors.green),
-                SizedBox(width: 12),
+                const Icon(Icons.medical_services, color: Colors.green),
+                const SizedBox(width: 12),
                 Text(
-                  'Treatment Advice',
-                  style: TextStyle(
+                  s.treatmentAdvice,
+                  style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
@@ -260,23 +264,23 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsSection() {
+  Widget _buildStatsSection(AppStrings s) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
         _buildStatItem(
           icon: Icons.timer,
-          label: 'Inference Time',
+          label: s.inferenceTime,
           value: '${inferenceTime}ms',
         ),
         _buildStatItem(
           icon: Icons.analytics,
-          label: 'Model Version',
+          label: s.modelVersion,
           value: '1.0',
         ),
         _buildStatItem(
           icon: Icons.device_hub,
-          label: 'Platform',
+          label: s.platform,
           value: 'MindSpore Lite',
         ),
       ],
@@ -310,7 +314,7 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, AppStrings s) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -334,19 +338,19 @@ class ResultsScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Scan Another'),
+              child: Text(s.scanAnother),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: FilledButton(
               onPressed: () => _createAlert(context),
-              child: const Row(
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_active_outlined, size: 20),
-                  SizedBox(width: 8),
-                  Text('Create alert'),
+                  const Icon(Icons.notifications_active_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Text(s.createAlert),
                 ],
               ),
             ),
@@ -402,7 +406,7 @@ class ResultsScreen extends StatelessWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Alert created.')),
+          SnackBar(content: Text(AppStrings.of(context).alertCreated)),
         );
       }
     } catch (e) {
@@ -462,7 +466,7 @@ class ResultsScreen extends StatelessWidget {
     return 'Consult with an agricultural expert for specific treatment recommendations.';
   }
 
-  Widget _buildRecommendations(BuildContext context, RecommendationResult rec) {
+  Widget _buildRecommendations(BuildContext context, AppStrings s, RecommendationResult rec) {
     final scheme = Theme.of(context).colorScheme;
 
     // Only show the "not a maize leaf" card when using the maize model
@@ -480,7 +484,7 @@ class ResultsScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'No recommendations available for this image. Please scan a clear maize leaf.',
+                  s.noChemicalsRecommended,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -501,7 +505,7 @@ class ResultsScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Leaf looks healthy. No chemicals recommended. Continue monitoring and good agronomic practices.',
+                  s.leafHealthy,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -546,7 +550,7 @@ class ResultsScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Credited agrochemicals & approved sellers',
+                    s.approvedSellers,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -609,7 +613,7 @@ class ResultsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Active ingredient: ${chem.activeIngredient}',
+                          '${s.activeIngredient}: ${chem.activeIngredient}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 8),
@@ -619,12 +623,12 @@ class ResultsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Approved sellers',
+                          s.approvedSellers.split('&').last.trim(),
                           style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 8),
                         if (sellers.isEmpty)
-                          Text('No sellers linked yet.', style: Theme.of(context).textTheme.bodySmall)
+                          Text(s.noSellersLinked, style: Theme.of(context).textTheme.bodySmall)
                         else
                           ...sellers.map((s) {
                             return Padding(
@@ -698,9 +702,8 @@ class ResultsScreen extends StatelessWidget {
   }
 
   void _shareResults(BuildContext context) {
-    // Implement share functionality
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sharing feature coming soon!')),
+      SnackBar(content: Text(AppStrings.of(context).shareComingSoon)),
     );
   }
 

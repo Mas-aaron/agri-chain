@@ -318,4 +318,65 @@ class ContractsApiService {
         .map((e) => LedgerEventDto.fromJson(e.cast<String, dynamic>()))
         .toList(growable: false);
   }
+
+  Future<List<PayoutDto>> fetchPayouts(String contractId) async {
+    final resp = await http
+        .get(
+          _url('/payments/payouts', query: {'contract_id': contractId}),
+          headers: _headers(),
+        )
+        .timeout(_timeout);
+
+    if (resp.statusCode >= 400) return [];
+
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map) return [];
+    final payouts = decoded['payouts'];
+    if (payouts is! List) return [];
+
+    return payouts
+        .whereType<Map>()
+        .map((e) => PayoutDto.fromJson(e.cast<String, dynamic>()))
+        .toList(growable: false);
+  }
 }
+
+class PayoutDto {
+  final String id;
+  final String contractId;
+  final String farmerName;
+  final String? farmerPhone;
+  final double amount;
+  final String currency;
+  final String status;
+  final String? disbursementMethod;
+  final String createdAt;
+
+  const PayoutDto({
+    required this.id,
+    required this.contractId,
+    required this.farmerName,
+    this.farmerPhone,
+    required this.amount,
+    required this.currency,
+    required this.status,
+    this.disbursementMethod,
+    required this.createdAt,
+  });
+
+  factory PayoutDto.fromJson(Map<String, dynamic> json) {
+    final amountRaw = json['amount'];
+    return PayoutDto(
+      id: (json['id'] ?? '').toString(),
+      contractId: (json['contract_id'] ?? '').toString(),
+      farmerName: (json['farmer_name'] ?? '').toString(),
+      farmerPhone: json['farmer_phone']?.toString(),
+      amount: amountRaw is num ? amountRaw.toDouble() : double.tryParse('$amountRaw') ?? 0,
+      currency: (json['currency'] ?? '').toString(),
+      status: (json['status'] ?? '').toString(),
+      disbursementMethod: json['disbursement_method']?.toString(),
+      createdAt: (json['created_at'] ?? '').toString(),
+    );
+  }
+}
+

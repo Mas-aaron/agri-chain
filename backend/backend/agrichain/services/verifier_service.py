@@ -7,7 +7,12 @@ Reuses the existing ConsensusEngine from oracle_service.py for median calculatio
 from __future__ import annotations
 
 import json
+import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger("agrichain.verifier")
+
 
 from agrichain.db.risk_db import (
     connect,
@@ -238,6 +243,76 @@ class VerifierService:
             deviation = abs(sub["submitted_yield"] - consensus_yield) / max(consensus_yield, 1)
             if deviation < 0.05:  # within 5%
                 insert_verifier_reward(sub["verifier_id"], 10.0, "ACCURACY_BONUS")
+
+        # ── Farmer payout after consensus ─────────────────────────────
+        try:
+            from agrichain.db.sqlite import connect as _db_connect
+            from agrichain.services.payout_service import create_payout
+
+            with _db_connect() as conn:
+                # Find the contract linked to this asset (farmer_name matches)
+                contract = conn.execute(
+                    """SELECT id, farmer_name, farmer_phone, quantity_kg, unit_price, currency, status
+                       FROM contracts
+                       WHERE farmer_name = (
+                           SELECT farmerId FROM blockchain_assets WHERE assetId=? LIMIT 1
+                       ) AND status = 'PURCHASED'
+                       ORDER BY created_at DESC LIMIT 1""",
+                    (asset_id,),
+                ).fetchone()
+
+                # Fallback: try matching asset_id directly in contract id
+                if not contract:
+                    contract = conn.execute(
+                        """SELECT id, farmer_name, farmer_phone, quantity_kg, unit_price, currency, status
+                           FROM contracts WHERE status = 'PURCHASED'
+                           ORDER BY created_at DESC LIMIT 1""",
+                    ).fetchone()
+
+                if contract:
+                    total = float(contract["quantity_kg"]) * float(contract["unit_price"])
+                    currency = contract["currency"]
+
+                    # Update contract status to VERIFIED
+                    conn.execute(
+                        "UPDATE contracts SET status='VERIFIED', updated_at=? WHERE id=?",
+                        (datetime.now(timezone.utc).isoformat(), contract["id"]),
+                    )
+
+                    # Create payout record
+                    create_payout(
+                        contract_id=contract["id"],
+                        farmer_name=contract["farmer_name"],
+                        farmer_phone=contract["farmer_phone"],
+                        amount=total,
+                        currency=currency,
+                        asset_id=asset_id,
+                        notes=f"Consensus yield: {consensus_yield:.1f} kg, confidence: {confidence:.2f}",
+                    )
+
+                    # SMS notification to farmer
+                    if contract["farmer_phone"]:
+                        try:
+                            import asyncio
+                            from agrichain.services.sms_service import notify_payout_initiated
+                            asyncio.ensure_future(notify_payout_initiated(
+                                farmer_phone=contract["farmer_phone"],
+                                contract_id=contract["id"],
+                                amount=f"{total:,.0f}",
+                                currency=currency,
+                            ))
+                        except Exception as sms_err:
+                            logger.warning(f"Payout SMS failed: {sms_err}")
+
+                    logger.info(
+                        f"Payout created for contract {contract['id']}: "
+                        f"{total:,.0f} {currency} → {contract['farmer_name']}"
+                    )
+                else:
+                    logger.warning(f"No PURCHASED contract found for asset {asset_id}")
+
+        except Exception as e:
+            logger.error(f"Payout creation failed for asset {asset_id}: {e}")
 
         return get_verifier_consensus(asset_id)
 

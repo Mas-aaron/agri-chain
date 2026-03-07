@@ -185,3 +185,15 @@ async def notify_payment_completed(
     params = [contract_id, amount, reference]
     logger.info(f"Sending payment-completed SMS to {farmer_phone} for {contract_id}")
     return await send_sms(farmer_phone, template_params=params)
+
+
+async def notify_payout_initiated(
+    farmer_phone: str,
+    contract_id: str,
+    amount: str,
+    currency: str,
+) -> Dict[str, str]:
+    """Notify farmer that their payout has been initiated after verification."""
+    params = [contract_id, amount, currency]
+    logger.info(f"Sending payout-initiated SMS to {farmer_phone} for {contract_id}")
+    return await send_sms(farmer_phone, template_params=params)

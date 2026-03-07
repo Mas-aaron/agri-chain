@@ -43,6 +43,12 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    final auth = _auth;
+    if (auth == null) throw Exception('Firebase Auth is not initialized');
+    await auth.sendPasswordResetEmail(email: email);
+  }
+
   Future<void> signOut() async {
     await _auth?.signOut();
     notifyListeners();

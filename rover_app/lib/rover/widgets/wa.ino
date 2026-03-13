@@ -9,6 +9,8 @@
 #include <HTTPClient.h>
 #include <BluetoothSerial.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
 #include <TinyGPS++.h>  // GPS library
 
 #include <Wire.h>
@@ -16,19 +18,12 @@
 
 #include <ESP32Servo.h>  // Servo library for soil sampling
 
-struct ScanResult;
-
-
-
 // ============== PIN DEFINITIONS ==============
 // Motor Driver Pins - D0-D3 Control
 #define D0 18  // Motor 1 control A
 #define D1 19  // Motor 1 control B
 #define D2 21  // Motor 2 control A
 #define D3 22  // Motor 2 control B
-
-const int PWM_FREQ = 20000;
-const int PWM_RES_BITS = 8;
 
 // Optional Features
 #define LED_BUILTIN 2
@@ -38,8 +33,6 @@ const int PWM_RES_BITS = 8;
 #define GPS_RX 16  // RX pin for GPS module
 #define GPS_TX 17  // TX pin for GPS module
 #define GPS_BAUD 9600  // Standard GPS module baud rate
-
-#define LIDAR_SERVO_PIN 27
 
 #define LIDAR_SDA 32
 #define LIDAR_SCL 33
@@ -53,15 +46,11 @@ IPAddress gateway(192, 168, 4, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 const char* staSsid = "MMU_Student";  // replace with your STA WiFi SSID
-const char* staPassword = "student20108";  // replace with your STA WiFi password
+const char* staPassword = "student2018";  // replace with your STA WiFi password
 
 // ============== BLUETOOTH CONFIGURATION ==============
 BluetoothSerial SerialBT;
 const char* btName = "ESP32_Rover_BT";
-
-volatile bool btClientConnected = false;
-
-extern String btCommand;
 
 void btCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   if (event == ESP_SPP_INIT_EVT) {
@@ -69,14 +58,8 @@ void btCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
   } else if (event == ESP_SPP_START_EVT) {
     Serial.println(F("Bluetooth SPP start"));
   } else if (event == ESP_SPP_SRV_OPEN_EVT) {
-    btClientConnected = true;
     Serial.println(F("Bluetooth client connected"));
   } else if (event == ESP_SPP_CLOSE_EVT) {
-    btClientConnected = false;
-    btCommand = "";
-    while (SerialBT.available()) {
-      (void)SerialBT.read();
-    }
     Serial.println(F("Bluetooth client disconnected"));
   }
 }
@@ -117,65 +100,9 @@ unsigned long lidarLastUpdate = 0;
 const unsigned long LIDAR_UPDATE_INTERVAL_MS = 100;
 const uint16_t LIDAR_OBSTACLE_THRESHOLD_MM = 250;
 
-unsigned long lidarInvalidSince = 0;
-uint16_t lidarConsecutiveInvalid = 0;
-unsigned long lidarLastRecoveryAttempt = 0;
-const unsigned long LIDAR_INVALID_RECOVERY_MS = 1500;
-const unsigned long LIDAR_RECOVERY_COOLDOWN_MS = 5000;
-
-unsigned long lidarLastSerialPrint = 0;
-const unsigned long LIDAR_SERIAL_PRINT_INTERVAL_MS = 500;
-
-unsigned long lidarLastInitAttempt = 0;
-const unsigned long LIDAR_INIT_RETRY_INTERVAL_MS = 5000;
-
-bool lidarInitialized = false;
-
-// Obstacle avoidance state machine
-enum AvoidanceState {
-  AVOID_NONE,
-  AVOID_STOP,
-  AVOID_DELAY,
-  AVOID_SCAN,
-  AVOID_BACK,
-  AVOID_BACK_STOP,
-  AVOID_TURN,
-  AVOID_TURN_STOP,
-  AVOID_RESUME
-};
-
-AvoidanceState avoidanceState = AVOID_NONE;
-unsigned long avoidanceStartTime = 0;
-bool turnLeftNext = true;
-
-// Avoidance timing constants (tunable)
-const unsigned long OBSTACLE_DELAY_MS = 200;
-const unsigned long OBSTACLE_BACKUP_MS = 500;
-const unsigned long OBSTACLE_BACK_STOP_MS = 200;
-const unsigned long OBSTACLE_TURN_MS = 800;
-const unsigned long OBSTACLE_TURN_STOP_MS = 200;
-
-void scanI2CBus() {
-  int found = 0;
-  for (uint8_t addr = 1; addr < 127; addr++) {
-    Wire.beginTransmission(addr);
-    uint8_t err = Wire.endTransmission();
-    if (err == 0) {
-      Serial.print(F("I2C device found at 0x"));
-      if (addr < 16) Serial.print('0');
-      Serial.println(addr, HEX);
-      found++;
-    }
-  }
-  if (found == 0) {
-    Serial.println(F("I2C scan: no devices found"));
-  }
-}
-
 // ============== SOIL SAMPLING ==============
 Servo servo1;  // Sampling arm servo
 Servo servo2;  // Sampling bucket servo
-Servo servo3;  // LiDAR scanning servo
 const int SERVO1_PIN = 25;  // GPIO 25 for servo 1
 const int SERVO2_PIN = 26;  // GPIO 26 for servo 2
 const int SAMPLE_ANGLE_MIN = 0;
@@ -225,6 +152,18 @@ const char* roverDeviceId = "rover-01";
 unsigned long lastBackendPost = 0;
 const unsigned long BACKEND_POST_INTERVAL_MS = 10000;  // Send GPS every 10 seconds
 
+// ============== MQTT ==============
+WiFiClientSecure wifiClient;
+PubSubClient mqttClient(wifiClient);
+const char* iotdaDeviceId = "69997692610343162ba3eb80_b0-cb-d8-89-db-30";  // replace with your IoTDA device ID
+const char* mqttHost = "dee43b65c8.st1.iotda-device.sa-brazil-1.myhuaweicloud.com";  // replace with your IoTDA host
+uint16_t mqttPort = 8883;
+const char* mqttUser = "69997692610343162ba3eb80_b0-cb-d8-89-db-30";  // replace with your IoTDA user
+const char* mqttPass = "a338c7811198ffdd9423b2977aab001abf8f62b9883a4c2ade69cdee50568842";  // replace with your IoTDA password
+const bool mqttTlsInsecure = true;
+unsigned long lastMqttPublish = 0;
+const unsigned long MQTT_PUBLISH_INTERVAL_MS = 1000;
+
 // ============== SYSTEM VARIABLES ==============
 // Movement state
 String currentCommand = "stop";
@@ -262,6 +201,7 @@ void setup() {
   initServos();
   initBluetooth();
   initWiFi();
+  initMQTT();
   
   // Initial state
   stopMotors();
@@ -277,11 +217,6 @@ void initPins() {
   pinMode(D1, OUTPUT);
   pinMode(D2, OUTPUT);
   pinMode(D3, OUTPUT);
-
-  ledcAttach(D0, PWM_FREQ, PWM_RES_BITS);
-  ledcAttach(D1, PWM_FREQ, PWM_RES_BITS);
-  ledcAttach(D2, PWM_FREQ, PWM_RES_BITS);
-  ledcAttach(D3, PWM_FREQ, PWM_RES_BITS);
   
   // Status LED
   pinMode(LED_BUILTIN, OUTPUT);
@@ -290,10 +225,10 @@ void initPins() {
   pinMode(BATTERY_PIN, INPUT);
   
   // Set initial states
-  ledcWrite(D0, 0);
-  ledcWrite(D1, 0);
-  ledcWrite(D2, 0);
-  ledcWrite(D3, 0);
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, LOW);
+  digitalWrite(D2, LOW);
+  digitalWrite(D3, LOW);
   digitalWrite(LED_BUILTIN, LOW);
   
   Serial.println(F(" ✓"));
@@ -310,23 +245,13 @@ void initGPS() {
 void initLidar() {
   Serial.print(F("Initializing VL53L0X..."));
   Wire.begin(LIDAR_SDA, LIDAR_SCL);
-  Wire.setClock(100000);
-  delay(10);
-  scanI2CBus();
   bool ok = vl53l0x.begin(0x29, &Wire);
   if (ok) {
     Serial.println(F(" ✓"));
-    lidarInitialized = true;
-    lidarData.isValid = false;
-
-    vl53l0x.configSensor(Adafruit_VL53L0X::VL53L0X_SENSE_LONG_RANGE);
-
-    lidarLastInitAttempt = millis();
+    lidarData.isValid = true;
   } else {
     Serial.println(F(" ✗"));
-    lidarInitialized = false;
     lidarData.isValid = false;
-    lidarLastInitAttempt = millis();
   }
 }
 
@@ -344,33 +269,20 @@ void initServos() {
   servo1.attach(SERVO1_PIN, 500, 2400);
   servo2.setPeriodHertz(50);
   servo2.attach(SERVO2_PIN, 500, 2400);
-  servo3.setPeriodHertz(50);
-  servo3.attach(LIDAR_SERVO_PIN, 500, 2400);
   
   // Set initial positions to 0°
   servo1.write(SAMPLE_ANGLE_MIN);
   servo2.write(SAMPLE_ANGLE_MIN);
-  servo3.write(90);  // Center position for LiDAR servo (0°=left, 180°=right, 90°=center)
   
   Serial.println(F(" ✓"));
   Serial.println(F("  └─ Servo 1: GPIO 25"));
   Serial.println(F("  └─ Servo 2: GPIO 26"));
-  Serial.println(F("  └─ Servo 3: GPIO 27 (LiDAR)"));
-
-  Serial.println(F("Servo 3 test: 0 -> 180 -> 90"));
-  servo3.write(0);
-  delay(800);
-  servo3.write(180);
-  delay(800);
-  servo3.write(90);
-  delay(400);
 }
 
 void initWiFi() {
   Serial.print(F("Connecting STA WiFi..."));
  
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
   WiFi.begin(staSsid, staPassword);
 
   unsigned long start = millis();
@@ -387,6 +299,67 @@ void initWiFi() {
   }
 }
 
+void initMQTT() {
+  if (mqttTlsInsecure) {
+    wifiClient.setInsecure();
+  }
+  mqttClient.setServer(mqttHost, mqttPort);
+  mqttClient.setCallback(mqttCallback);
+}
+
+void handleMQTT() {
+  if (strlen(mqttHost) == 0) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  if (!mqttClient.connected()) {
+    ensureMqttConnected();
+  }
+  mqttClient.loop();
+
+  if (gpsData.isValid && mqttClient.connected()) {
+    if (millis() - lastMqttPublish >= MQTT_PUBLISH_INTERVAL_MS) {
+      publishGpsTelemetry();
+      lastMqttPublish = millis();
+    }
+  }
+}
+
+void ensureMqttConnected() {
+  String clientId = String(hostname) + "-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+
+  bool ok = false;
+  if (strlen(mqttUser) > 0) {
+    ok = mqttClient.connect(clientId.c_str(), mqttUser, mqttPass);
+  } else {
+    ok = mqttClient.connect(clientId.c_str());
+  }
+  if (ok) {
+    String cmdTopic = String("$oc/devices/") + iotdaDeviceId + "/sys/commands/#";
+    mqttClient.subscribe(cmdTopic.c_str());
+  }
+}
+
+void publishGpsTelemetry() {
+  StaticJsonDocument<384> doc;
+  JsonArray services = doc.createNestedArray("services");
+  JsonObject svc = services.createNestedObject();
+  svc["service_id"] = "Rover";
+  JsonObject props = svc.createNestedObject("properties");
+  props["lat"] = gpsData.latitude;
+  props["lon"] = gpsData.longitude;
+  props["alt"] = gpsData.altitude;
+  props["speed"] = gpsData.speed;
+  props["course"] = gpsData.course;
+  props["sat"] = gpsData.satellites;
+  props["hdop"] = gpsData.hdop;
+
+  char payload[512];
+  size_t n = serializeJson(doc, payload, sizeof(payload));
+  if (n == 0) return;
+
+  String topic = String("$oc/devices/") + iotdaDeviceId + "/sys/properties/report";
+  mqttClient.publish(topic.c_str(), payload);
+}
 
 // ============== AGRICHAIN BACKEND HTTP POST ==============
 void postSensorDataToBackend() {
@@ -400,7 +373,7 @@ void postSensorDataToBackend() {
   String url = String(agrichainBaseUrl) + "/sensor-data";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(1500);
+  http.setTimeout(5000);
 
   // Build JSON payload
   StaticJsonDocument<384> doc;
@@ -429,6 +402,104 @@ void postSensorDataToBackend() {
   }
 
   http.end();
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  if (length == 0) return;
+
+  StaticJsonDocument<2048> doc;
+  DeserializationError err = deserializeJson(doc, payload, length);
+  if (err) return;
+
+  String t(topic);
+
+  String cmdPrefix = String("$oc/devices/") + iotdaDeviceId + "/sys/commands/";
+  if (!t.startsWith(cmdPrefix)) return;
+
+  int idx = t.indexOf("request_id=");
+  String requestId = idx >= 0 ? t.substring(idx + 11) : "";
+
+  String commandName = doc.containsKey("command_name") ? doc["command_name"].as<String>() : "";
+  JsonObject paras = doc["paras"].as<JsonObject>();
+  bool handled = false;
+  int resultCode = 0;
+
+  if (commandName == "MOVE") {
+    if (paras.containsKey("command")) {
+      String cmd = paras["command"].as<String>();
+      cmd.trim();
+      cmd.toLowerCase();
+      executeCommand(cmd, "MQTT");
+      handled = true;
+    }
+  } else if (commandName == "SET_ROUTE") {
+    JsonArray waypoints = paras["waypoints"].as<JsonArray>();
+    StaticJsonDocument<3072> routeDoc;
+
+    if (waypoints.isNull() && paras.containsKey("route_json")) {
+      const char* routeJson = paras["route_json"].as<const char*>();
+      if (routeJson && strlen(routeJson) > 0) {
+        DeserializationError rerr = deserializeJson(routeDoc, routeJson);
+        if (!rerr) {
+          waypoints = routeDoc["waypoints"].as<JsonArray>();
+        }
+      }
+    }
+
+    if (!waypoints.isNull()) {
+      int count = 0;
+      for (JsonVariant v : waypoints) {
+        if (count >= MAX_WAYPOINTS) break;
+        JsonObject wp = v.as<JsonObject>();
+        if (!wp.containsKey("lat") || !wp.containsKey("lon")) continue;
+        activeRoute.waypoints[count].latitude = wp["lat"].as<double>();
+        activeRoute.waypoints[count].longitude = wp["lon"].as<double>();
+        activeRoute.waypoints[count].altitude = wp.containsKey("alt") ? wp["alt"].as<double>() : 0.0;
+        activeRoute.waypoints[count].timestamp = millis();
+        activeRoute.waypoints[count].index = count;
+        count++;
+      }
+      if (count > 0) {
+        activeRoute.createdAt = millis();
+        activeRoute.waypointCount = count;
+
+        if (paras.containsKey("tolerance")) {
+          navigationTolerance = paras["tolerance"].as<double>();
+        } else if (!routeDoc.isNull() && routeDoc.containsKey("tolerance")) {
+          navigationTolerance = routeDoc["tolerance"].as<double>();
+        }
+
+        bool start = paras.containsKey("start") ? paras["start"].as<bool>() : true;
+        if (!routeDoc.isNull() && routeDoc.containsKey("start")) {
+          start = routeDoc["start"].as<bool>();
+        }
+        if (start && gpsData.isValid) {
+          isNavigating = true;
+          currentWaypointIndex = 0;
+        }
+        handled = true;
+      }
+    }
+  }
+
+  if (!handled) {
+    resultCode = 1;
+  }
+
+  if (requestId.length() > 0 && mqttClient.connected()) {
+    String respTopic = String("$oc/devices/") + iotdaDeviceId + "/sys/commands/response/request_id=" + requestId;
+    StaticJsonDocument<256> resp;
+    resp["result_code"] = resultCode;
+    resp["response_name"] = "COMMAND_RESPONSE";
+    JsonObject rparas = resp.createNestedObject("paras");
+    rparas["result"] = resultCode == 0 ? "success" : "fail";
+
+    char respPayload[256];
+    size_t rn = serializeJson(resp, respPayload, sizeof(respPayload));
+    if (rn > 0) {
+      mqttClient.publish(respTopic.c_str(), respPayload);
+    }
+  }
 }
 
 void initBluetooth() {
@@ -511,8 +582,8 @@ void loop() {
   handleBluetooth();          // Handle Bluetooth commands
   updateGPS();                // Read GPS data
   updateLidar();              // Read lidar sensor
-  handleObstacleAvoidance();  // Check for obstacles and start avoidance
-  updateObstacleAvoidance();  // Update avoidance state machine
+  handleObstacleAvoidance();  // Auto-stop if obstacle detected
+  handleMQTT();               // Huawei IoT MQTT
   postSensorDataToBackend();  // AgriChain backend HTTP POST
   updateSystemStatus();       // Update system status
   runHeartbeat();             // LED indicator
@@ -849,7 +920,6 @@ void handleNavigationStatus() {
 
 // ============== BLUETOOTH HANDLING ==============
 void handleBluetooth() {
-  if (!btClientConnected) return;
   if (!SerialBT.available()) return;
   
   char c = SerialBT.read();
@@ -1062,12 +1132,12 @@ void forward() {
   isMoving = true;
   
   // Motor 1 forward: D0=HIGH, D1=LOW
-  ledcWrite(D0, motorSpeed);
-  ledcWrite(D1, 0);
+  digitalWrite(D0, HIGH);
+  digitalWrite(D1, LOW);
   
   // Motor 2 forward: D2=HIGH, D3=LOW
-  ledcWrite(D2, motorSpeed);
-  ledcWrite(D3, 0);
+  digitalWrite(D2, HIGH);
+  digitalWrite(D3, LOW);
   
   Serial.println(F("  ▶ FORWARD"));
 }
@@ -1077,12 +1147,12 @@ void backward() {
   isMoving = true;
   
   // Motor 1 backward: D0=LOW, D1=HIGH
-  ledcWrite(D0, 0);
-  ledcWrite(D1, motorSpeed);
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, HIGH);
   
   // Motor 2 backward: D2=LOW, D3=HIGH
-  ledcWrite(D2, 0);
-  ledcWrite(D3, motorSpeed);
+  digitalWrite(D2, LOW);
+  digitalWrite(D3, HIGH);
   
   Serial.println(F("  ◀ BACKWARD"));
 }
@@ -1092,11 +1162,11 @@ void turnLeft() {
   isMoving = true;
   
   // Left turn: stop left motor, run right motor forward
-  ledcWrite(D0, 0);
-  ledcWrite(D1, 0);
+  digitalWrite(D0, LOW);  // Motor 1 stop
+  digitalWrite(D1, LOW);
   
-  ledcWrite(D2, motorSpeed);
-  ledcWrite(D3, 0);
+  digitalWrite(D2, HIGH); // Motor 2 forward
+  digitalWrite(D3, LOW);
   
   Serial.println(F("  ↰ TURN LEFT"));
 }
@@ -1106,12 +1176,11 @@ void turnRight() {
   isMoving = true;
   
   // Right turn: run left motor forward, stop right motor
-  ledcWrite(D0, motorSpeed);
-  ledcWrite(D1, 0);
+  digitalWrite(D0, HIGH); // Motor 1 forward
+  digitalWrite(D1, LOW);
   
-  // Motor 2 stop
-  ledcWrite(D2, 0);
-  ledcWrite(D3, 0);
+  digitalWrite(D2, LOW);  // Motor 2 stop
+  digitalWrite(D3, LOW);
   
   Serial.println(F("  ↱ TURN RIGHT"));
 }
@@ -1121,11 +1190,11 @@ void rotateLeft() {
   isMoving = true;
   
   // Rotate left: left backward, right forward
-  ledcWrite(D0, 0);
-  ledcWrite(D1, motorSpeed);
+  digitalWrite(D0, LOW);  // Motor 1 backward
+  digitalWrite(D1, HIGH);
   
-  ledcWrite(D2, motorSpeed);
-  ledcWrite(D3, 0);
+  digitalWrite(D2, HIGH); // Motor 2 forward
+  digitalWrite(D3, LOW);
   
   Serial.println(F("  ↺ ROTATE LEFT"));
 }
@@ -1135,11 +1204,11 @@ void rotateRight() {
   isMoving = true;
   
   // Rotate right: left forward, right backward
-  ledcWrite(D0, motorSpeed);
-  ledcWrite(D1, 0);
+  digitalWrite(D0, HIGH); // Motor 1 forward
+  digitalWrite(D1, LOW);
   
-  ledcWrite(D2, 0);
-  ledcWrite(D3, motorSpeed);
+  digitalWrite(D2, LOW);  // Motor 2 backward
+  digitalWrite(D3, HIGH);
   
   Serial.println(F("  ↻ ROTATE RIGHT"));
 }
@@ -1149,10 +1218,10 @@ void stopMotors() {
   isMoving = false;
   
   // All motors stop
-  ledcWrite(D0, 0);
-  ledcWrite(D1, 0);
-  ledcWrite(D2, 0);
-  ledcWrite(D3, 0);
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, LOW);
+  digitalWrite(D2, LOW);
+  digitalWrite(D3, LOW);
   
   Serial.println(F("  ⏹ STOP"));
 }
@@ -1161,14 +1230,10 @@ void setSpeed(int speed) {
   motorSpeed = constrain(speed, 0, 255);
   Serial.print(F("⚡ Speed: "));
   Serial.println(motorSpeed);
-
-  if (isMoving) {
-    if (currentDirection == "forward") forward();
-    else if (currentDirection == "backward") backward();
-    else if (currentDirection == "left") turnLeft();
-    else if (currentDirection == "right") turnRight();
-    else if (currentDirection == "rotate-left") rotateLeft();
-    else if (currentDirection == "rotate-right") rotateRight();
+  
+  if (motorSpeed > 0 && motorSpeed < 255) {
+    Serial.println(F("   Note: Your driver uses fixed speed"));
+    Serial.println(F("   Speed setting is for compatibility only"));
   }
 }
 
@@ -1262,252 +1327,35 @@ void updateGPS() {
 }
 
 void updateLidar() {
-  if (!lidarInitialized) {
-    if (millis() - lidarLastInitAttempt >= LIDAR_INIT_RETRY_INTERVAL_MS) {
-      initLidar();
-    }
-    return;
-  }
+  if (!lidarData.isValid) return;
   if (millis() - lidarLastUpdate < LIDAR_UPDATE_INTERVAL_MS) return;
   lidarLastUpdate = millis();
 
   VL53L0X_RangingMeasurementData_t measure;
   vl53l0x.rangingTest(&measure, false);
 
-  if (measure.RangeStatus != 0) {
-    lidarData.distanceMm = 0;
+  if (measure.RangeStatus == 4) {
     lidarData.isValid = false;
-
-    if (lidarInvalidSince == 0) {
-      lidarInvalidSince = millis();
-      lidarConsecutiveInvalid = 1;
-    } else {
-      lidarConsecutiveInvalid++;
-    }
-
-    if ((millis() - lidarInvalidSince) >= LIDAR_INVALID_RECOVERY_MS &&
-        (millis() - lidarLastRecoveryAttempt) >= LIDAR_RECOVERY_COOLDOWN_MS) {
-      lidarLastRecoveryAttempt = millis();
-      lidarInitialized = false;
-      lidarLastInitAttempt = millis() - LIDAR_INIT_RETRY_INTERVAL_MS;
-    }
-
-    if (millis() - lidarLastSerialPrint >= LIDAR_SERIAL_PRINT_INTERVAL_MS) {
-      Serial.print(F("📏 LiDAR: invalid (status="));
-      Serial.print(measure.RangeStatus);
-      Serial.println(F(")"));
-      lidarLastSerialPrint = millis();
-    }
     return;
   }
 
-  uint16_t mm = (uint16_t)measure.RangeMilliMeter;
-  if (mm == 0 || mm > 4000 || mm < 50) {
-    lidarData.distanceMm = 0;
-    lidarData.isValid = false;
-
-    if (lidarInvalidSince == 0) {
-      lidarInvalidSince = millis();
-      lidarConsecutiveInvalid = 1;
-    } else {
-      lidarConsecutiveInvalid++;
-    }
-
-    if ((millis() - lidarInvalidSince) >= LIDAR_INVALID_RECOVERY_MS &&
-        (millis() - lidarLastRecoveryAttempt) >= LIDAR_RECOVERY_COOLDOWN_MS) {
-      lidarLastRecoveryAttempt = millis();
-      lidarInitialized = false;
-      lidarLastInitAttempt = millis() - LIDAR_INIT_RETRY_INTERVAL_MS;
-    }
-
-    if (millis() - lidarLastSerialPrint >= LIDAR_SERIAL_PRINT_INTERVAL_MS) {
-      Serial.print(F("📏 LiDAR: out-of-range ("));
-      Serial.print(mm);
-      Serial.println(F("mm)"));
-      lidarLastSerialPrint = millis();
-    }
-    return;
-  }
-
-  lidarData.distanceMm = mm;
+  lidarData.distanceMm = (uint16_t)measure.RangeMilliMeter;
   lidarData.lastReadTime = millis();
   lidarData.isValid = true;
-
-  lidarInvalidSince = 0;
-  lidarConsecutiveInvalid = 0;
-
-  if (millis() - lidarLastSerialPrint >= LIDAR_SERIAL_PRINT_INTERVAL_MS) {
-    Serial.print(F("📏 LiDAR: "));
-    Serial.print(lidarData.distanceMm);
-    Serial.println(F(" mm"));
-    lidarLastSerialPrint = millis();
-  }
 }
 
 void handleObstacleAvoidance() {
-  if (avoidanceState != AVOID_NONE) return; // Already in avoidance
-
+  if (!isMoving) return;
   if (!lidarData.isValid) return;
   if (lidarData.distanceMm == 0) return;
 
   if (lidarData.distanceMm <= LIDAR_OBSTACLE_THRESHOLD_MM) {
-    avoidanceState = AVOID_STOP;
-    avoidanceStartTime = millis();
     stopMotors();
     isNavigating = false;
     lastError = "Obstacle detected";
     Serial.print(F("🛑 Obstacle detected @"));
     Serial.print(lidarData.distanceMm);
-    Serial.println(F("mm - Starting avoidance"));
-  }
-}
-
-// LiDAR scanning for obstacle avoidance
-struct ScanResult {
-  int angle;      // Servo angle (0=left, 90=center, 180=right)
-  uint16_t distance; // Distance in mm
-};
-
-ScanResult scanDirections() {
-  Serial.println(F("🔍 Scanning directions..."));
-  
-  // Define scan angles: left, center, right
-  int angles[] = {0, 90, 180}; // 0°=left, 90°=center, 180°=right
-  uint16_t distances[3];
-  
-  for (int i = 0; i < 3; i++) {
-    servo3.write(angles[i]);
-    delay(500); // Wait for servo to move and stabilize
-    
-    // Take multiple readings and average
-    uint16_t sum = 0;
-    int validCount = 0;
-    for (int j = 0; j < 5; j++) {
-      if (lidarInitialized) {
-        VL53L0X_RangingMeasurementData_t measure;
-        vl53l0x.rangingTest(&measure, false);
-        if (measure.RangeStatus == 0 && measure.RangeMilliMeter > 0) {
-          sum += measure.RangeMilliMeter;
-          validCount++;
-        }
-      }
-      delay(50);
-    }
-    
-    distances[i] = validCount > 0 ? sum / validCount : 0;
-    Serial.print(F("  Angle "));
-    Serial.print(angles[i]);
-    Serial.print(F("°: "));
-    Serial.print(distances[i]);
     Serial.println(F("mm"));
-  }
-  
-  // Return to center
-  servo3.write(90);
-  delay(300);
-  
-  // Find the direction with maximum distance
-  uint16_t maxDist = 0;
-  int bestAngle = 90; // Default to center
-  
-  for (int i = 0; i < 3; i++) {
-    if (distances[i] > maxDist) {
-      maxDist = distances[i];
-      bestAngle = angles[i];
-    }
-  }
-  
-  ScanResult result;
-  result.angle = bestAngle;
-  result.distance = maxDist;
-  
-  Serial.print(F("✅ Best direction: "));
-  Serial.print(bestAngle);
-  Serial.print(F("° with "));
-  Serial.print(maxDist);
-  Serial.println(F("mm"));
-  
-  return result;
-}
-
-void updateObstacleAvoidance() {
-  if (avoidanceState == AVOID_NONE) return;
-
-  unsigned long elapsed = millis() - avoidanceStartTime;
-
-  switch (avoidanceState) {
-    case AVOID_STOP:
-      if (elapsed >= OBSTACLE_DELAY_MS) {
-        avoidanceState = AVOID_SCAN;
-        avoidanceStartTime = millis();
-        Serial.println(F("🔍 Scanning for best direction"));
-      }
-      break;
-
-    case AVOID_SCAN:
-      // Scan is blocking, so do it here
-      {
-        ScanResult scan = scanDirections();
-        avoidanceState = AVOID_BACK;
-        avoidanceStartTime = millis();
-        
-        // Decide turn direction based on scan
-        if (scan.angle == 0) {
-          // Best is left, so turn left
-          turnLeftNext = true;
-        } else if (scan.angle == 180) {
-          // Best is right, so turn right
-          turnLeftNext = false;
-        } else {
-          // Center or equal, use alternating
-          turnLeftNext = !turnLeftNext;
-        }
-        
-        Serial.println(F("⬅️ Backing up"));
-        backward();
-      }
-      break;
-
-    case AVOID_BACK:
-      if (elapsed >= OBSTACLE_BACKUP_MS) {
-        stopMotors();
-        avoidanceState = AVOID_BACK_STOP;
-        avoidanceStartTime = millis();
-      }
-      break;
-
-    case AVOID_BACK_STOP:
-      if (elapsed >= OBSTACLE_BACK_STOP_MS) {
-        avoidanceState = AVOID_TURN;
-        avoidanceStartTime = millis();
-        if (turnLeftNext) {
-          Serial.println(F("↺ Turning left"));
-          rotateLeft();
-        } else {
-          Serial.println(F("↻ Turning right"));
-          rotateRight();
-        }
-      }
-      break;
-
-    case AVOID_TURN:
-      if (elapsed >= OBSTACLE_TURN_MS) {
-        stopMotors();
-        avoidanceState = AVOID_TURN_STOP;
-        avoidanceStartTime = millis();
-      }
-      break;
-
-    case AVOID_TURN_STOP:
-      if (elapsed >= OBSTACLE_TURN_STOP_MS) {
-        avoidanceState = AVOID_NONE;
-        Serial.println(F("▶️ Resuming forward"));
-        forward();
-      }
-      break;
-
-    default:
-      break;
   }
 }
 

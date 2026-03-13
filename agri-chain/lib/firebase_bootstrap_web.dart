@@ -17,15 +17,12 @@ const String _kFirebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');
 // To get the web AppId:
 //   Firebase Console → Project Settings → General → Your apps → Add app → Web
 //   Then copy the firebaseConfig block.
-//
-// Fill these in if you register a web app in the Firebase console:
 const String _kFallbackApiKey            = 'AIzaSyCzsadLe76q9qK8OzgmzY6aYAu7A11-c08';
 const String _kFallbackProjectId         = 'agri-chain-models';
 const String _kFallbackMessagingSenderId = '540713348802';
 const String _kFallbackAuthDomain        = 'agri-chain-models.firebaseapp.com';
 const String _kFallbackStorageBucket     = 'agri-chain-models.firebasestorage.app';
 // Web App ID: set this after adding a Web app in Firebase Console → Project Settings
-// Format: '1:540713348802:web:XXXXXXXXXXXXXXXX'
 const String _kFallbackWebAppId          = '1:540713348802:web:d7ce41540262036fd7155b';
 
 String _resolve(String envVal, String fallback) =>

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,6 +12,7 @@ import 'package:agri_chain/screens/results_screen.dart';
 import 'package:agri_chain/widgets/disease_card.dart';
 import 'package:agri_chain/widgets/scan_button.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 class HomeScreen extends StatefulWidget {
   final bool embedded;
@@ -210,10 +211,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
                 }
 
+                final s = AppStrings.of(context);
                 final items = [
-                  const DropdownMenuItem<String?>(
+                  DropdownMenuItem<String?>(
                     value: null,
-                    child: Text('No field selected'),
+                    child: Text(s.noFieldSelectedOptional),
                   ),
                   ...fields.map(
                     (f) => DropdownMenuItem<String?>(
@@ -232,10 +234,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String?>(
-                            initialValue: effectiveSelectedFieldId,
+                            value: effectiveSelectedFieldId,
                             items: items,
-                            decoration: const InputDecoration(
-                              labelText: 'Selected field (optional)',
+                            decoration: InputDecoration(
+                              labelText: s.selectedFieldOptional,
                             ),
                             onChanged: (value) => context.read<ScanProvider>().setSelectedFieldId(value),
                           ),
@@ -256,30 +258,33 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Icon(Icons.eco_outlined),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: DropdownButtonFormField<CropModel>(
-                        initialValue: _cropModel,
-                        decoration: const InputDecoration(
-                          labelText: 'Crop model',
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: CropModel.maize,
-                            child: Text('Maize'),
+                      child: Builder(builder: (ctx) {
+                        final s2 = AppStrings.of(ctx);
+                        return DropdownButtonFormField<CropModel>(
+                          value: _cropModel,
+                          decoration: InputDecoration(
+                            labelText: s2.cropModel,
                           ),
-                          DropdownMenuItem(
-                            value: CropModel.coffee,
-                            child: Text('Coffee'),
-                          ),
-                        ],
-                        onChanged: _isLoading
-                            ? null
-                            : (value) {
-                                if (value == null) return;
-                                setState(() {
-                                  _cropModel = value;
-                                });
-                              },
-                      ),
+                          items: [
+                            DropdownMenuItem(
+                              value: CropModel.maize,
+                              child: Text(s2.maize),
+                            ),
+                            DropdownMenuItem(
+                              value: CropModel.coffee,
+                              child: Text(s2.coffee),
+                            ),
+                          ],
+                          onChanged: _isLoading
+                              ? null
+                              : (value) {
+                                  if (value == null) return;
+                                  setState(() {
+                                    _cropModel = value;
+                                  });
+                                },
+                        );
+                      }),
                     ),
                   ],
                 ),
@@ -343,19 +348,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             DiseaseCard(
-              diseaseName: 'Coffee Berry Disease',
+              diseaseName: 'Phoma',
               severity: 'High',
               color: Colors.red,
               icon: Icons.bug_report_outlined,
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
-              ),
-            ),
-            DiseaseCard(
-              diseaseName: 'Cercospora Leaf Spot',
-              severity: 'Medium',
-              color: Colors.blue,
-              icon: Icons.grain_outlined,
               onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Scan a leaf photo to get an exact diagnosis and treatment advice.')),
               ),

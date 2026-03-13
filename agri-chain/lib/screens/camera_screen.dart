@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 // You might need to retrieve the available cameras list in main.dart first
 // and pass one into this widget's constructor, or retrieve it within initState.
@@ -142,7 +143,7 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Take Picture'),
+        title: Text(AppStrings.of(context).takePicture),
         actions: [
           IconButton(
             icon: Icon(_isFlashOn ? Icons.flash_on : Icons.flash_off),

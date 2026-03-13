@@ -1,15 +1,17 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:agri_chain/splash_screen.dart';
 import 'package:agri_chain/services/tflite_service.dart';
 import 'package:agri_chain/providers/scan_provider.dart';
 import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
+import 'package:agri_chain/providers/locale_provider.dart';
 import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
 import 'package:agri_chain/firebase_bootstrap.dart';
 import 'package:agri_chain/rover/providers/rover_provider.dart';
 import 'package:agri_chain/services/auth_service.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
+import 'package:agri_chain/providers/verifier_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,6 +37,8 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AlertsProvider()),
         ChangeNotifierProvider(create: (_) => BlockchainProvider()),
         ChangeNotifierProvider(create: (_) => RoverProvider()),
+        ChangeNotifierProvider(create: (_) => VerifierProvider()),
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
       ],
       child: const MaizeDetectorApp(),
     ),
@@ -46,6 +50,7 @@ class MaizeDetectorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localeProvider = context.watch<LocaleProvider>();
     const primary = Color(0xFF2E7D32);
     const primaryDark = Color(0xFF1B5E20);
     const background = Color(0xFFF6F8F7);

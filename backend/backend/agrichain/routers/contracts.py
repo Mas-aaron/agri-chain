@@ -18,6 +18,7 @@ class ContractCreateRequest(BaseModel):
     unit_price: float
     currency: str = "UGX"
     farmer_name: str
+    farmer_phone: Optional[str] = None
     evidence_hash: Optional[str] = None
 
 
@@ -38,6 +39,7 @@ class ContractResponse(BaseModel):
     currency: str
     status: str
     farmer_name: str
+    farmer_phone: Optional[str] = None
     buyer_name: Optional[str] = None
     evidence_hash: Optional[str] = None
     created_at: str
@@ -65,6 +67,7 @@ def _row_to_contract(row) -> ContractResponse:
         currency=str(row["currency"]),
         status=str(row["status"]),
         farmer_name=str(row["farmer_name"]),
+        farmer_phone=(str(row["farmer_phone"]) if row["farmer_phone"] is not None else None),
         buyer_name=(str(row["buyer_name"]) if row["buyer_name"] is not None else None),
         evidence_hash=(str(row["evidence_hash"]) if row["evidence_hash"] is not None else None),
         created_at=str(row["created_at"]),
@@ -103,8 +106,8 @@ async def create_contract(payload: ContractCreateRequest):
             """
             INSERT INTO contracts (
                 id, crop, quantity_kg, unit_price, currency, status,
-                farmer_name, buyer_name, evidence_hash, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                farmer_name, farmer_phone, buyer_name, evidence_hash, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 contract_id,
@@ -114,6 +117,7 @@ async def create_contract(payload: ContractCreateRequest):
                 payload.currency,
                 "LISTED",
                 payload.farmer_name.strip(),
+                payload.farmer_phone.strip() if payload.farmer_phone else None,
                 None,
                 payload.evidence_hash,
                 now,
@@ -159,7 +163,26 @@ async def purchase_contract(contract_id: str, payload: ContractPurchaseRequest):
             meta={"status": "PURCHASED"},
         )
         updated = conn.execute("SELECT * FROM contracts WHERE id=?", (contract_id,)).fetchone()
-        return _row_to_contract(updated)
+
+    # ── SMS notification to farmer ────────────────────────────────
+    farmer_phone = row["farmer_phone"] if row["farmer_phone"] else None
+    if farmer_phone:
+        try:
+            from agrichain.services.sms_service import notify_contract_purchased
+            total = float(row["quantity_kg"]) * float(row["unit_price"])
+            await notify_contract_purchased(
+                farmer_phone=farmer_phone,
+                contract_id=contract_id,
+                buyer_name=payload.buyer_name.strip(),
+                crop=str(row["crop"]),
+                total=total,
+                currency=str(row["currency"]),
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger("agrichain.contracts").warning(f"SMS notification failed: {e}")
+
+    return _row_to_contract(updated)
 
 
 @router.post("/contracts/{contract_id}/deliver", response_model=ContractResponse)

@@ -14,6 +14,7 @@ import 'package:agri_chain/screens/yield_prediction_screen.dart';
 import 'package:agri_chain/services/weather_api_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/rover/rover_entry_screen.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 import 'package:agri_chain/screens/tabs/alerts_tab.dart';
 import 'package:agri_chain/screens/tabs/fields_tab.dart';
@@ -239,6 +240,15 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                leading: const Icon(Icons.calendar_month),
+                title: const Text('7-day forecast'),
+                subtitle: const Text('View upcoming weather for your area'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showForecastSheet();
+                },
+              ),
+              ListTile(
                 leading: const Icon(Icons.my_location),
                 title: const Text('Use device GPS'),
                 subtitle: const Text('Get weather for your current location'),
@@ -258,6 +268,114 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  static const _dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  Future<void> _showForecastSheet() async {
+    final fields = context.read<FieldsProvider>().fields;
+    final rawLocation = fields.isEmpty ? '' : fields.first.location;
+    final gps = await _tryGetDeviceCoordinatesIfPermitted();
+    final coords = gps ?? await _resolveCoordinates(rawLocation);
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return FutureBuilder<List<DailyForecast>>(
+          future: _api.fetchForecast(latitude: coords.lat, longitude: coords.lon),
+          builder: (ctx, snap) {
+            final scheme = Theme.of(ctx).colorScheme;
+
+            Widget body;
+            if (snap.connectionState == ConnectionState.waiting) {
+              body = const Padding(
+                padding: EdgeInsets.all(48),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            } else if (snap.hasError || snap.data == null) {
+              body = Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(child: Text('Could not load forecast', style: TextStyle(color: scheme.error))),
+              );
+            } else {
+              final days = snap.data!;
+              body = Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...days.map((d) {
+                    final dayName = d.date.day == DateTime.now().day
+                        ? 'Today'
+                        : _dayNames[d.date.weekday - 1];
+                    final icon = _iconForCode(d.weatherCode);
+                    final accent = _accentForCode(ctx, d.weatherCode);
+                    final desc = _describeCode(d.weatherCode);
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            child: Text(dayName,
+                              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: accent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(icon, color: accent, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(desc, style: Theme.of(ctx).textTheme.bodySmall),
+                          ),
+                          Text(
+                            '${d.tempMax.round()}°',
+                            style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${d.tempMin.round()}°',
+                            style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                ],
+              );
+            }
+
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_month, color: scheme.primary),
+                        const SizedBox(width: 8),
+                        Text('7-Day Forecast',
+                          style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  body,
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -351,7 +469,7 @@ class _WeatherFeatureCardState extends State<_WeatherFeatureCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Weather',
+                          AppStrings.of(context).weather,
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 2),
@@ -429,15 +547,15 @@ class DashboardTab extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             children: [
               ImageHeroCard(
-                imageUrl: 'https://images.unsplash.com/photo-1581001808603-9d8f3ec200bc?w=800&q=80',
-                title: 'Welcome back',
-                subtitle: isLoading ? 'Loading your farm summary…' : 'Monitor fields, predict yield, and sell safely.',
+                imageUrl: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=800&q=80',
+                title: AppStrings.of(context).welcomeBack,
+                subtitle: isLoading ? 'Loading your farm summary…' : AppStrings.of(context).dashboardSubtitle,
               ),
               const SizedBox(height: 16),
 
-              const SectionHeader(
-                title: 'Quick actions',
-                subtitle: 'Most used tools for today',
+              SectionHeader(
+                title: AppStrings.of(context).quickActions,
+                subtitle: AppStrings.of(context).quickActionsSubtitle,
               ),
               const SizedBox(height: 12),
               _QuickActionsRow(),
@@ -445,16 +563,16 @@ class DashboardTab extends StatelessWidget {
               const _SecondaryActionsRow(),
               const SizedBox(height: 18),
 
-              const SectionHeader(
-                title: 'Overview',
-                subtitle: 'Your farm status at a glance',
+              SectionHeader(
+                title: AppStrings.of(context).overview,
+                subtitle: AppStrings.of(context).overviewSubtitle,
               ),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: MiniStatTile(
-                      label: 'Active fields',
+                      label: AppStrings.of(context).activeFields,
                       value: '$fieldsCount',
                       icon: Icons.map_outlined,
                     ),
@@ -462,7 +580,7 @@ class DashboardTab extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: MiniStatTile(
-                      label: 'Pending alerts',
+                      label: AppStrings.of(context).pendingAlerts,
                       value: '$alertsCount',
                       icon: Icons.notifications_outlined,
                     ),
@@ -471,15 +589,15 @@ class DashboardTab extends StatelessWidget {
               ),
               const SizedBox(height: 18),
 
-              const SectionHeader(
-                title: 'Tools',
-                subtitle: 'Use AI + marketplace features',
+              SectionHeader(
+                title: AppStrings.of(context).tools,
+                subtitle: AppStrings.of(context).toolsSubtitle,
               ),
               const SizedBox(height: 12),
               FeatureCard(
                 icon: Icons.auto_graph_outlined,
-                title: 'Yield forecast',
-                subtitle: 'Predict maize yield using the online model',
+                title: AppStrings.of(context).yieldForecast,
+                subtitle: AppStrings.of(context).yieldForecastSubtitle,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const YieldPredictionScreen()),
@@ -488,8 +606,8 @@ class DashboardTab extends StatelessWidget {
               const SizedBox(height: 10),
               FeatureCard(
                 icon: Icons.storefront_outlined,
-                title: 'Agri‑Market',
-                subtitle: 'Create, buy, and track Future Harvest Contracts',
+                title: AppStrings.of(context).agriMarket,
+                subtitle: AppStrings.of(context).agriMarketSubtitle,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const BlockchainHubScreen()),
@@ -498,8 +616,8 @@ class DashboardTab extends StatelessWidget {
               const SizedBox(height: 10),
               FeatureCard(
                 icon: Icons.smart_toy_outlined,
-                title: 'ESP32 Rover',
-                subtitle: 'Connect and control your rover (WiFi / Bluetooth)',
+                title: AppStrings.of(context).rover,
+                subtitle: AppStrings.of(context).roverSubtitle,
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => RoverEntryScreen()),
@@ -553,7 +671,7 @@ class _QuickActionsRow extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.storefront_outlined),
-                label: const Text('Contracts'),
+                label: Text(AppStrings.of(context).contracts),
               ),
             ),
             const SizedBox(width: 12),
@@ -566,7 +684,7 @@ class _QuickActionsRow extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.account_balance_outlined),
-                label: const Text('Loans'),
+                label: Text(AppStrings.of(context).loans),
               ),
             ),
           ],
@@ -583,7 +701,7 @@ class _QuickActionsRow extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.map_outlined),
-                label: const Text('Fields'),
+                label: Text(AppStrings.of(context).fields),
               ),
             ),
             const SizedBox(width: 12),
@@ -596,7 +714,7 @@ class _QuickActionsRow extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.auto_graph_outlined),
-                label: const Text('Yield'),
+                label: Text(AppStrings.of(context).yield_),
               ),
             ),
           ],
@@ -622,7 +740,7 @@ class _SecondaryActionsRow extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Traceability'),
+            label: Text(AppStrings.of(context).traceability),
           ),
         ),
         const SizedBox(width: 12),
@@ -635,7 +753,7 @@ class _SecondaryActionsRow extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.notifications_outlined),
-            label: const Text('Alerts'),
+            label: Text(AppStrings.of(context).alerts),
           ),
         ),
       ],

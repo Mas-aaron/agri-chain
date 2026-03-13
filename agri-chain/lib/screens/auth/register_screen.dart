@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:agri_chain/services/auth_service.dart';
+import 'package:agri_chain/providers/verifier_provider.dart';
+import 'package:agri_chain/screens/verifier/verifier_dashboard.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -13,8 +15,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _emailCtl = TextEditingController();
   final _passCtl = TextEditingController();
   final _confirmCtl = TextEditingController();
+  final _orgNameCtl = TextEditingController();
   bool _isLoading = false;
   String? _error;
+  String _selectedRole = 'Farmer';
+
+  static const _roles = ['Farmer', 'Verifier'];
 
   Future<void> _register() async {
     setState(() {
@@ -35,10 +41,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
         throw Exception('Passwords do not match.');
       }
 
+      if (_selectedRole == 'Verifier' && _orgNameCtl.text.trim().isEmpty) {
+        throw Exception('Organization name is required for verifiers.');
+      }
+
       await context.read<AuthService>().registerWithEmail(email, pass);
-      // Wait a frame and pop so AuthWrapper handles the redirection
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (mounted) Navigator.pop(context);
+
+      if (_selectedRole == 'Verifier') {
+        // Register as verifier and navigate to verifier dashboard
+        if (!mounted) return;
+        final verifierProv = context.read<VerifierProvider>();
+        await verifierProv.register(
+          userId: email,
+          organizationName: _orgNameCtl.text.trim(),
+          organizationType: 'INSPECTOR',
+        );
+        await verifierProv.loadDashboardData();
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const VerifierDashboard()),
+          );
+        }
+      } else {
+        // Default farmer flow — pop and let AuthWrapper redirect
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (mounted) Navigator.pop(context);
+      }
     } catch (e) {
       setState(() {
         _error = e.toString().replaceAll(RegExp(r'\[.*\]'), '').trim();
@@ -50,6 +79,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Create Account'), elevation: 0),
       body: Center(
@@ -67,7 +98,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   children: [
                     Text('Join AgriChain', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
                     const SizedBox(height: 8),
-                    const Text('Register to access advanced farming tools.'),
+                    const Text('Register to access advanced farming and verification tools.'),
                     const SizedBox(height: 32),
                     
                     if (_error != null)
@@ -81,6 +112,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         child: Text(_error!, style: TextStyle(color: Colors.red.shade800, fontSize: 13)),
                       ),
+
+                    // ── Role selector ───────────────────────────
+                    DropdownButtonFormField<String>(
+                      value: _selectedRole,
+                      decoration: InputDecoration(
+                        labelText: 'I am a...',
+                        prefixIcon: Icon(
+                          _selectedRole == 'Verifier' ? Icons.verified_user : Icons.agriculture,
+                          color: _selectedRole == 'Verifier' ? Colors.deepPurple : scheme.primary,
+                        ),
+                      ),
+                      items: _roles
+                          .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedRole = v!),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Verifier-specific: org name ─────────────
+                    if (_selectedRole == 'Verifier') ...[
+                      TextField(
+                        controller: _orgNameCtl,
+                        decoration: const InputDecoration(
+                          labelText: 'Organization Name',
+                          prefixIcon: Icon(Icons.business),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                       
                     TextField(
                       controller: _emailCtl,
@@ -105,9 +165,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: _isLoading ? null : _register,
+                        style: _selectedRole == 'Verifier'
+                            ? FilledButton.styleFrom(backgroundColor: Colors.deepPurple)
+                            : null,
                         child: _isLoading 
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                            : const Text('Create Account'),
+                            : Text(_selectedRole == 'Verifier'
+                                ? 'Create Verifier Account'
+                                : 'Create Account'),
                       ),
                     ),
                   ],
@@ -120,3 +185,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+

@@ -16,6 +16,25 @@ class AgriChainBackendService {
     return Uri.parse('$trimmed$path').replace(queryParameters: query);
   }
 
+  Future<String> startSession({
+    required String farmId,
+    required String deviceId,
+  }) async {
+    final uri = _buildUri(path: '/sensor-data/sessions');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'farm_id': farmId, 'rover_id': deviceId}),
+    ).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to start session (${response.statusCode})');
+    }
+
+    final decoded = json.decode(response.body);
+    return decoded['session_id'] as String;
+  }
+
   Future<List<BackendSensorPoint>> fetchSensorPoints({
     String? deviceId,
     int? limit,

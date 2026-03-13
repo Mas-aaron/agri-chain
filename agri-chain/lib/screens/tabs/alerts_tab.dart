@@ -6,7 +6,8 @@ import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/widgets/modern_ui.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
-import 'package:agri_chain/screens/tabs/fields_tab.dart'; // Needed to push to FieldDetailScreen
+import 'package:agri_chain/screens/tabs/fields_tab.dart';
+import 'package:agri_chain/l10n/app_strings.dart';
 
 enum _AlertsFilter { all, unread, critical }
 
@@ -22,8 +23,9 @@ class _AlertsTabState extends State<AlertsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Alerts')),
+      appBar: AppBar(title: Text(s.alertsTitle)),
       body: FutureBuilder<void>(
         future: context.read<AlertsProvider>().ensureLoaded(),
       builder: (context, snapshot) {
@@ -34,16 +36,16 @@ class _AlertsTabState extends State<AlertsTab> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const ImageHeroCard(
+            ImageHeroCard(
               imageUrl: 'https://source.unsplash.com/1200x700/?maize,leaf,field',
-              title: 'Alerts',
-              subtitle: 'AI insights and field notifications that need your attention.',
+              title: s.alertsTitle,
+              subtitle: s.alertsSubtitle,
             ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Alerts', style: Theme.of(context).textTheme.titleLarge),
+                Text(s.alertsTitle, style: Theme.of(context).textTheme.titleLarge),
                 TextButton(
                   onPressed: alerts.isEmpty
                       ? null
@@ -63,7 +65,7 @@ class _AlertsTabState extends State<AlertsTab> {
                   onSelected: (_) => setState(() => _filter = _AlertsFilter.all),
                 ),
                 ChoiceChip(
-                  label: Text('Unread (${provider.unreadCount})'),
+                  label: Text('${s.alertsTitle} (${provider.unreadCount})'),
                   selected: _filter == _AlertsFilter.unread,
                   onSelected: (_) => setState(() => _filter = _AlertsFilter.unread),
                 ),
@@ -80,7 +82,7 @@ class _AlertsTabState extends State<AlertsTab> {
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    'No alerts yet. Scan a leaf to generate an AI health alert.',
+                    s.noAlerts,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -218,7 +220,7 @@ class _AlertDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Recommendation', style: titleStyle),
+            Text(AppStrings.of(context).viewDetails, style: titleStyle),
             const SizedBox(height: 8),
             Text(
               rec.isHealthy
@@ -303,7 +305,7 @@ class _AlertDetailScreen extends StatelessWidget {
         );
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Alert details'),
+        title: Text(AppStrings.of(context).viewDetails),
         actions: [
           IconButton(
             tooltip: latest.isRead ? 'Mark unread' : 'Mark read',

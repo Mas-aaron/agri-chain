@@ -12,6 +12,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <TinyGPS++.h>  // GPS library
+#include <ModbusMaster.h>
 
 #include <ESP32Servo.h>  // Servo library for soil sampling
 
@@ -26,16 +27,15 @@
 #define LED_BUILTIN 2
 #define BATTERY_PIN 34  // ADC pin for battery monitoring (optional)
 
-// GPS Module Pins (Serial2 UART)
-#define GPS_RX 16  // RX pin for GPS module
-#define GPS_TX 17  // TX pin for GPS module
+// GPS Module Pins (Serial1 UART)
+#define GPS_RX 13  // RX pin for GPS module
+#define GPS_TX 14  // TX pin for GPS module
 #define GPS_BAUD 9600  // Standard GPS module baud rate
 
-// NPK Sensor Pins (RS485 to TTL - Serial1 UART)
-#define NPK_RX 13      // RO (Receive Out) - Safe pin
-#define NPK_TX 14      // DI (Data In) - Safe pin
-#define NPK_DE_RE 27   // DE & RE connected together - Safe pin
-#define NPK_BAUD 9600  // NPK sensor baud rate (TAIDCENT CWT-SOIL-NPKPHCTH-S)
+// NPK Sensor Pins (Serial2 UART) - no DE/RE, matches working sketch
+#define NPK_RX 16  // RO/RXD on adapter
+#define NPK_TX 17  // DI/TXD on adapter
+#define NPK_BAUD 4800  // NPK sensor baud rate
 
 // ============== WIFI CONFIGURATION ==============
 const char* ssid = "ESP32_Rover";
@@ -54,7 +54,7 @@ const char* btName = "ESP32_Rover_BT";
 
 // ============== GPS CONFIGURATION ==============
 TinyGPSPlus gps;
-HardwareSerial gpsSerial(2);  // Serial2 for GPS module
+HardwareSerial gpsSerial(1);  // Serial1 for GPS module
 
 // GPS Data variables
 struct {
@@ -77,7 +77,8 @@ unsigned long gpsLastByteTime = 0;
 unsigned long gpsLastHeartbeatTime = 0;
 
 // ============== NPK SENSOR CONFIGURATION ==============
-HardwareSerial npkSerial(1); // Serial1 for RS485 module
+HardwareSerial npkSerial(2); // Serial2 for NPK sensor
+ModbusMaster node;
 
 struct {
   float moisture = 0.0;
@@ -91,17 +92,8 @@ struct {
   bool isValid = false;
 } npkData;
 
-// TAIDCENT CWT-SOIL-NPKPHCTH-S register addresses (single-byte reads)
-const uint16_t REG_NITROGEN   = 0x07DA;
-const uint16_t REG_PHOSPHORUS = 0x07E4;
-const uint16_t REG_POTASSIUM  = 0x07EE;
-const uint16_t REG_PH         = 0x07F8;
-const uint16_t REG_MOISTURE   = 0x0802;
-const uint16_t REG_TEMP       = 0x080C;
-const uint16_t REG_EC         = 0x0816;
-
 unsigned long npkLastUpdate = 0;
-const unsigned long NPK_UPDATE_INTERVAL_MS = 5000; // Read sensor every 5 seconds
+const unsigned long NPK_UPDATE_INTERVAL_MS = 3000; // Read sensor every 3 seconds
 
 // ============== SOIL SAMPLING ==============
 Servo servo1;  // Sampling arm servo
@@ -248,18 +240,14 @@ void initGPS() {
 void initNPKSensor() {
   Serial.print(F("Initializing NPK Sensor..."));
   
-  pinMode(NPK_DE_RE, OUTPUT);
-  digitalWrite(NPK_DE_RE, LOW); // Start in receive mode
-  
-  // Some TTL to RS485 modules (MAX485 clones) have inverted logic levels on the ESP32
-  // If the standard configuration produces FF FF FF, we try inverting the RX/TX signals
-  // bool invert = false; (standard) -> change to true if it still outputs FF
   npkSerial.begin(NPK_BAUD, SERIAL_8N1, NPK_RX, NPK_TX);
+  node.begin(1, npkSerial); // Slave ID is 1
   
   Serial.println(F(" ✓"));
-  Serial.println(F("  └─ Baud Rate: 9600"));
-  Serial.println(F("  └─ RS485 DE/RE: GPIO 27"));
-  Serial.println(F("  └─ Sensor: TAIDCENT CWT-SOIL-NPKPHCTH-S"));
+  Serial.print(F("  └─ Baud Rate: "));
+  Serial.println(NPK_BAUD);
+  Serial.println(F("  └─ Pins: RX=16 TX=17 (no DE/RE)"));
+  Serial.println(F("  └─ Sensor: CWT 7-in-1 ModbusMaster"));
 }
 
 void initServos() {
@@ -1360,102 +1348,36 @@ void updateGPS() {
 
 // ============== NPK SENSOR FUNCTIONS ==============
 
-// Calculate Modbus RTU CRC-16
-uint16_t calculateCRC(byte* data, uint8_t len) {
-  uint16_t crc = 0xFFFF;
-  for (uint8_t i = 0; i < len; i++) {
-    crc ^= (uint16_t)data[i];
-    for (uint8_t j = 0; j < 8; j++) {
-      if (crc & 0x0001) {
-        crc >>= 1;
-        crc ^= 0xA001;
-      } else {
-        crc >>= 1;
-      }
-    }
-  }
-  return crc;
-}
-
-// Read a single byte value from a sensor register via Modbus RTU
-uint8_t readNPKRegisterByte(uint16_t reg) {
-  byte query[8];
-  query[0] = 0x01;               // Device address
-  query[1] = 0x03;               // Function code: Read Holding Registers
-  query[2] = (reg >> 8) & 0xFF;  // Register high byte
-  query[3] = reg & 0xFF;         // Register low byte
-  query[4] = 0x00;               // Count high byte
-  query[5] = 0x01;               // Count low byte (1 register)
-
-  uint16_t crc = calculateCRC(query, 6);
-  query[6] = crc & 0xFF;
-  query[7] = (crc >> 8) & 0xFF;
-
-  // Flush any stale bytes
-  while (npkSerial.available()) npkSerial.read();
-
-  // Transmit
-  digitalWrite(NPK_DE_RE, HIGH);
-  delay(2);
-  npkSerial.write(query, 8);
-  npkSerial.flush();
-  delay(3);
-  digitalWrite(NPK_DE_RE, LOW);
-
-  // Wait up to 100 ms for the first byte
-  unsigned long t0 = millis();
-  while (!npkSerial.available() && millis() - t0 < 100);
-
-  if (npkSerial.available()) {
-    return npkSerial.read();
-  }
-  return 0;
-}
-
-// NPK registers to read, one per loop iteration to avoid blocking
-const uint16_t NPK_REGS[] = {REG_NITROGEN, REG_PHOSPHORUS, REG_POTASSIUM, REG_PH, REG_MOISTURE, REG_TEMP, REG_EC};
-const uint8_t NPK_REG_COUNT = 7;
-uint8_t npkRegIndex = 0;             // Which register to read next
-uint8_t npkReadBuf[7] = {0};         // Buffer for readings
-unsigned long npkLastRegRead = 0;
-const unsigned long NPK_REG_INTERVAL = 150; // ms between individual register reads
-
 void updateNPKSensor() {
-  // Stagger reads: read ONE register per call (~105ms max), not all 7 at once
-  if (millis() - npkLastRegRead < NPK_REG_INTERVAL) return;
-  npkLastRegRead = millis();
+  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) return;
+  npkLastUpdate = millis();
 
-  // Read one register
-  npkReadBuf[npkRegIndex] = readNPKRegisterByte(NPK_REGS[npkRegIndex]);
-  npkRegIndex++;
+  uint8_t result = node.readHoldingRegisters(0x0000, 7);
 
-  // Once all 7 registers have been read, update the data struct
-  if (npkRegIndex >= NPK_REG_COUNT) {
-    npkRegIndex = 0;
-
-    npkData.nitrogen     = npkReadBuf[0];
-    npkData.phosphorus   = npkReadBuf[1];
-    npkData.potassium    = npkReadBuf[2];
-    npkData.ph           = npkReadBuf[3] / 10.0f;   // e.g. 65 -> 6.5
-    npkData.moisture     = npkReadBuf[4];
-    npkData.temperature  = npkReadBuf[5];
-    npkData.ec           = npkReadBuf[6];
+  if (result == node.ku8MBSuccess) {
+    // Scaling based on CWT manual
+    npkData.moisture     = node.getResponseBuffer(0) / 10.0;
+    npkData.temperature  = node.getResponseBuffer(1) / 10.0;
+    npkData.ec           = node.getResponseBuffer(2);
+    npkData.ph           = node.getResponseBuffer(3) / 10.0;
+    npkData.nitrogen     = node.getResponseBuffer(4);
+    npkData.phosphorus   = node.getResponseBuffer(5);
+    npkData.potassium    = node.getResponseBuffer(6);
     npkData.lastReadTime = millis();
+    npkData.isValid      = true;
 
-    npkData.isValid = (npkReadBuf[0] || npkReadBuf[1] || npkReadBuf[2] ||
-                       npkReadBuf[3] || npkReadBuf[4] || npkReadBuf[5] || npkReadBuf[6]);
-
-    if (npkData.isValid) {
-      Serial.print(F("🌱 NPK: N=")); Serial.print(npkData.nitrogen, 0);
-      Serial.print(F(" P="));        Serial.print(npkData.phosphorus, 0);
-      Serial.print(F(" K="));        Serial.print(npkData.potassium, 0);
-      Serial.print(F(" pH="));       Serial.print(npkData.ph, 1);
-      Serial.print(F(" Moist="));    Serial.print(npkData.moisture, 0);
-      Serial.print(F("%  Temp="));   Serial.print(npkData.temperature, 0);
-      Serial.print(F("C EC="));      Serial.println(npkData.ec, 0);
-    } else {
-      Serial.println(F("⚠️ NPK Sensor: all readings zero (no response or sensor off)"));
-    }
+    Serial.print("Moisture: "); Serial.print(npkData.moisture); Serial.print("% | ");
+    Serial.print("Temp: ");     Serial.print(npkData.temperature); Serial.print("C | ");
+    Serial.print("pH: ");       Serial.println(npkData.ph);
+    Serial.print("EC: ");       Serial.print((int)npkData.ec);  Serial.println(" us/cm");
+    Serial.print("NPK: ");      Serial.print((int)npkData.nitrogen); Serial.print("/");
+    Serial.print((int)npkData.phosphorus); Serial.print("/"); Serial.println((int)npkData.potassium);
+    Serial.println("--------------------------------------------");
+  } else {
+    npkData.isValid = false;
+    Serial.print("Error: ");
+    if (result == 0xE2) Serial.println("Timeout - Check 12V Power & A/B wires");
+    else Serial.println(result, HEX);
   }
 }
 

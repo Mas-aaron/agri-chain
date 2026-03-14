@@ -556,6 +556,15 @@ void initWebServer() {
   server.on("/api/rotate-left", HTTP_GET, handleRotateLeft);
   server.on("/api/rotate-right", HTTP_GET, handleRotateRight);
   server.on("/api/stop", HTTP_GET, handleStop);
+
+  // Compatibility endpoints (used by some apps/UIs)
+  server.on("/forward", HTTP_GET, handleForward);
+  server.on("/backward", HTTP_GET, handleBackward);
+  server.on("/left", HTTP_GET, handleLeft);
+  server.on("/right", HTTP_GET, handleRight);
+  server.on("/rotate-left", HTTP_GET, handleRotateLeft);
+  server.on("/rotate-right", HTTP_GET, handleRotateRight);
+  server.on("/stop", HTTP_GET, handleStop);
   
   // Short endpoints for efficiency
   server.on("/f", HTTP_GET, handleForward);
@@ -598,11 +607,17 @@ void initWebServer() {
 
 // ============== MAIN LOOP ==============
 void loop() {
+  server.handleClient();      // Handle Web UI / REST API requests
   handleBluetooth();          // Handle Bluetooth commands
   updateGPS();                // Read GPS data
-  updateNPKSensor();          // Read NPK soil sensor
+
+  // Keep control loop responsive: defer slower operations while moving/avoiding
+  if (!isMoving) {
+    updateNPKSensor();          // Read NPK soil sensor
+    postSensorDataToBackend();  // AgriChain backend HTTP POST
+  }
+
   handleMQTT();               // Huawei IoT MQTT
-  postSensorDataToBackend();  // AgriChain backend HTTP POST
   updateSystemStatus();       // Update system status
   runHeartbeat();             // LED indicator
   
@@ -620,8 +635,8 @@ void loop() {
   if (isNavigating) {
     executeAutonomousNavigation();
   }
-  
-  delay(10);  // Small delay for stability
+
+  delay(1);
 }
 
 // ============== WEB INTERFACE ==============

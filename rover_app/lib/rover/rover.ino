@@ -142,7 +142,7 @@ double navigationTolerance = 10.0;  // meters
 WebServer server(80);
 
 // ============== AGRICHAIN BACKEND ==============
-const char* agrichainBaseUrl = "http://101.44.10.153:8000";
+const char* agrichainBaseUrl = "http://159.138.116.91:8000";
 const char* roverDeviceId = "rover-01";
 unsigned long lastBackendPost = 0;
 const unsigned long BACKEND_POST_INTERVAL_MS = 10000;  // Send GPS every 10 seconds

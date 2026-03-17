@@ -9,12 +9,12 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// redirects, so we also check in `onPageStarted` and `onUrlChange`.
 class PesapalPaymentScreen extends StatefulWidget {
   final String checkoutUrl;
-  final String callbackDomain; // e.g. "101.44.10.153"
+  final String callbackDomain; // e.g. "159.138.116.91"
 
   const PesapalPaymentScreen({
     super.key,
     required this.checkoutUrl,
-    this.callbackDomain = "101.44.10.153",
+    this.callbackDomain = "159.138.116.91",
   });
 
   @override

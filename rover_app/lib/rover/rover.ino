@@ -12,6 +12,7 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <TinyGPS++.h>  // GPS library
+#include <ModbusMaster.h>
 
 #include <ESP32Servo.h>  // Servo library for soil sampling
 
@@ -26,16 +27,15 @@
 #define LED_BUILTIN 2
 #define BATTERY_PIN 34  // ADC pin for battery monitoring (optional)
 
-// GPS Module Pins (Serial2 UART)
-#define GPS_RX 16  // RX pin for GPS module
-#define GPS_TX 17  // TX pin for GPS module
+// GPS Module Pins (Serial1 UART)
+#define GPS_RX 13  // RX pin for GPS module
+#define GPS_TX 14  // TX pin for GPS module
 #define GPS_BAUD 9600  // Standard GPS module baud rate
 
-// NPK Sensor Pins (RS485 to TTL - Serial1 UART)
-#define NPK_RX 13      // RO (Receive Out) - Safe pin
-#define NPK_TX 14      // DI (Data In) - Safe pin
-#define NPK_DE_RE 27   // DE & RE connected together - Safe pin
-#define NPK_BAUD 4800  // NPK sensor default baud rate
+// NPK Sensor Pins (Serial2 UART) - no DE/RE, matches working sketch
+#define NPK_RX 16  // RO/RXD on adapter
+#define NPK_TX 17  // DI/TXD on adapter
+#define NPK_BAUD 4800  // NPK sensor baud rate
 
 // ============== WIFI CONFIGURATION ==============
 const char* ssid = "ESP32_Rover";
@@ -54,7 +54,7 @@ const char* btName = "ESP32_Rover_BT";
 
 // ============== GPS CONFIGURATION ==============
 TinyGPSPlus gps;
-HardwareSerial gpsSerial(2);  // Serial2 for GPS module
+HardwareSerial gpsSerial(1);  // Serial1 for GPS module
 
 // GPS Data variables
 struct {
@@ -77,7 +77,8 @@ unsigned long gpsLastByteTime = 0;
 unsigned long gpsLastHeartbeatTime = 0;
 
 // ============== NPK SENSOR CONFIGURATION ==============
-HardwareSerial npkSerial(1); // Serial1 for RS485 module
+HardwareSerial npkSerial(2); // Serial2 for NPK sensor
+ModbusMaster node;
 
 struct {
   float moisture = 0.0;
@@ -91,75 +92,8 @@ struct {
   bool isValid = false;
 } npkData;
 
-// Modbus RTU Queries for 7-in-1 sensor
-// Standard registers: 0x0000 -> 0x0003 (Moist, Temp, EC, pH)
-const byte queryEnv[] = {0x01, 0x03, 0x00, 0x00, 0x00, 0x04, 0x44, 0x09};
-
-// Scanner revealed NPK actually starts at 0x0022 (Dec 34) on this specific clone
-// N is at 0x22, P is at 0x23, K is at 0x24 (using 0x0022)
-const byte queryNPK[] = {0x01, 0x03, 0x00, 0x22, 0x00, 0x03, 0xA5, 0xC1};
-
 unsigned long npkLastUpdate = 0;
-const unsigned long NPK_UPDATE_INTERVAL_MS = 5000; // Read sensor every 5 seconds
-int currentQueryStep = 0; // 0 = Env, 1 = NPK
-
-uint16_t modbusCrc16(const uint8_t* data, size_t len) {
-  uint16_t crc = 0xFFFF;
-  for (size_t i = 0; i < len; i++) {
-    crc ^= (uint16_t)data[i];
-    for (int j = 0; j < 8; j++) {
-      if (crc & 0x0001) {
-        crc >>= 1;
-        crc ^= 0xA001;
-      } else {
-        crc >>= 1;
-      }
-    }
-  }
-  return crc;
-}
-
-void buildReadHoldingQuery(uint8_t slave, uint16_t startReg, uint16_t count, uint8_t* out8) {
-  out8[0] = slave;
-  out8[1] = 0x03;
-  out8[2] = (startReg >> 8) & 0xFF;
-  out8[3] = startReg & 0xFF;
-  out8[4] = (count >> 8) & 0xFF;
-  out8[5] = count & 0xFF;
-  uint16_t crc = modbusCrc16(out8, 6);
-  out8[6] = crc & 0xFF;
-  out8[7] = (crc >> 8) & 0xFF;
-}
-
-bool readModbusFrame(uint8_t* frame, size_t frameMax, size_t* outLen, uint16_t timeoutMs) {
-  *outLen = 0;
-  unsigned long start = millis();
-  while (millis() - start < timeoutMs) {
-    if (npkSerial.available()) {
-      uint8_t b = (uint8_t)npkSerial.read();
-      if (*outLen < frameMax) {
-        frame[(*outLen)++] = b;
-      }
-      if (*outLen >= 3) {
-        if (frame[0] != 0x01 || frame[1] != 0x03) {
-          continue;
-        }
-        uint8_t byteCount = frame[2];
-        size_t expected = (size_t)3 + (size_t)byteCount + 2;
-        if (expected > frameMax) {
-          return false;
-        }
-        if (*outLen >= expected) {
-          uint16_t crcCalc = modbusCrc16(frame, expected - 2);
-          uint16_t crcRx = (uint16_t)frame[expected - 2] | ((uint16_t)frame[expected - 1] << 8);
-          *outLen = expected;
-          return crcCalc == crcRx;
-        }
-      }
-    }
-  }
-  return false;
-}
+const unsigned long NPK_UPDATE_INTERVAL_MS = 3000; // Read sensor every 3 seconds
 
 // ============== SOIL SAMPLING ==============
 Servo servo1;  // Sampling arm servo
@@ -208,7 +142,7 @@ double navigationTolerance = 10.0;  // meters
 WebServer server(80);
 
 // ============== AGRICHAIN BACKEND ==============
-const char* agrichainBaseUrl = "http://101.44.10.153:8000";
+const char* agrichainBaseUrl = "http://159.138.116.91:8000";
 const char* roverDeviceId = "rover-01";
 unsigned long lastBackendPost = 0;
 const unsigned long BACKEND_POST_INTERVAL_MS = 10000;  // Send GPS every 10 seconds
@@ -306,17 +240,14 @@ void initGPS() {
 void initNPKSensor() {
   Serial.print(F("Initializing NPK Sensor..."));
   
-  pinMode(NPK_DE_RE, OUTPUT);
-  digitalWrite(NPK_DE_RE, LOW); // Start in receive mode
-  
-  // Some TTL to RS485 modules (MAX485 clones) have inverted logic levels on the ESP32
-  // If the standard configuration produces FF FF FF, we try inverting the RX/TX signals
-  // bool invert = false; (standard) -> change to true if it still outputs FF
-  npkSerial.begin(NPK_BAUD, SERIAL_8N1, NPK_RX, NPK_TX, false);
+  npkSerial.begin(NPK_BAUD, SERIAL_8N1, NPK_RX, NPK_TX);
+  node.begin(1, npkSerial); // Slave ID is 1
   
   Serial.println(F(" ✓"));
-  Serial.println(F("  └─ Baud Rate: 4800"));
-  Serial.println(F("  └─ RS485 DE/RE: GPIO 27"));
+  Serial.print(F("  └─ Baud Rate: "));
+  Serial.println(NPK_BAUD);
+  Serial.println(F("  └─ Pins: RX=16 TX=17 (no DE/RE)"));
+  Serial.println(F("  └─ Sensor: CWT 7-in-1 ModbusMaster"));
 }
 
 void initServos() {
@@ -371,16 +302,24 @@ void initMQTT() {
   mqttClient.setCallback(mqttCallback);
 }
 
+unsigned long lastMqttReconnect = 0;
+const unsigned long MQTT_RECONNECT_COOLDOWN = 10000; // 10s between reconnect attempts
+
 void handleMQTT() {
   if (strlen(mqttHost) == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;
 
   if (!mqttClient.connected()) {
-    ensureMqttConnected();
+    // Only attempt reconnect every 10s to avoid blocking the loop
+    if (millis() - lastMqttReconnect >= MQTT_RECONNECT_COOLDOWN) {
+      lastMqttReconnect = millis();
+      ensureMqttConnected();
+    }
+    return;  // Don't try to publish if not connected
   }
   mqttClient.loop();
 
-  if (gpsData.isValid && mqttClient.connected()) {
+  if (gpsData.isValid) {
     if (millis() - lastMqttPublish >= MQTT_PUBLISH_INTERVAL_MS) {
       publishGpsTelemetry();
       lastMqttPublish = millis();
@@ -448,7 +387,7 @@ void postSensorDataToBackend() {
   String url = String(agrichainBaseUrl) + "/sensor-data";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(5000);
+  http.setTimeout(1500);  // Reduced from 5000ms to prevent blocking BT commands
 
   // Build JSON payload
   StaticJsonDocument<384> doc;
@@ -617,6 +556,15 @@ void initWebServer() {
   server.on("/api/rotate-left", HTTP_GET, handleRotateLeft);
   server.on("/api/rotate-right", HTTP_GET, handleRotateRight);
   server.on("/api/stop", HTTP_GET, handleStop);
+
+  // Compatibility endpoints (used by some apps/UIs)
+  server.on("/forward", HTTP_GET, handleForward);
+  server.on("/backward", HTTP_GET, handleBackward);
+  server.on("/left", HTTP_GET, handleLeft);
+  server.on("/right", HTTP_GET, handleRight);
+  server.on("/rotate-left", HTTP_GET, handleRotateLeft);
+  server.on("/rotate-right", HTTP_GET, handleRotateRight);
+  server.on("/stop", HTTP_GET, handleStop);
   
   // Short endpoints for efficiency
   server.on("/f", HTTP_GET, handleForward);
@@ -659,11 +607,17 @@ void initWebServer() {
 
 // ============== MAIN LOOP ==============
 void loop() {
+  server.handleClient();      // Handle Web UI / REST API requests
   handleBluetooth();          // Handle Bluetooth commands
   updateGPS();                // Read GPS data
-  updateNPKSensor();          // Read NPK soil sensor
+
+  // Keep control loop responsive: defer slower operations while moving/avoiding
+  if (!isMoving) {
+    updateNPKSensor();          // Read NPK soil sensor
+    postSensorDataToBackend();  // AgriChain backend HTTP POST
+  }
+
   handleMQTT();               // Huawei IoT MQTT
-  postSensorDataToBackend();  // AgriChain backend HTTP POST
   updateSystemStatus();       // Update system status
   runHeartbeat();             // LED indicator
   
@@ -681,8 +635,8 @@ void loop() {
   if (isNavigating) {
     executeAutonomousNavigation();
   }
-  
-  delay(10);  // Small delay for stability
+
+  delay(1);
 }
 
 // ============== WEB INTERFACE ==============
@@ -1073,46 +1027,6 @@ void processBluetoothCommand(String cmd) {
       SerialBT.println("✓ Soil sampling started");
     }
   }
-
-  else if (cmd == "npkscan") {
-    SerialBT.println("NPK scan start");
-    uint8_t q[8];
-    uint8_t f[64];
-    size_t flen = 0;
-
-    for (uint16_t r = 0x0010; r <= 0x0030; r++) {
-      while (npkSerial.available()) npkSerial.read();
-      buildReadHoldingQuery(0x01, r, 3, q);
-
-      digitalWrite(NPK_DE_RE, HIGH);
-      delay(10);
-      npkSerial.write(q, 8);
-      npkSerial.flush();
-      delay(4);
-      digitalWrite(NPK_DE_RE, LOW);
-      delay(5);
-
-      bool ok = readModbusFrame(f, sizeof(f), &flen, 350);
-      if (ok && flen >= 11 && f[2] == 0x06) {
-        uint16_t v1 = ((uint16_t)f[3] << 8) | f[4];
-        uint16_t v2 = ((uint16_t)f[5] << 8) | f[6];
-        uint16_t v3 = ((uint16_t)f[7] << 8) | f[8];
-        SerialBT.print("reg 0x");
-        if (r < 0x1000) SerialBT.print("0");
-        if (r < 0x0100) SerialBT.print("0");
-        if (r < 0x0010) SerialBT.print("0");
-        SerialBT.print(String(r, HEX));
-        SerialBT.print(" -> ");
-        SerialBT.print(v1);
-        SerialBT.print(",");
-        SerialBT.print(v2);
-        SerialBT.print(",");
-        SerialBT.println(v3);
-      }
-      delay(30);
-    }
-    SerialBT.println("NPK scan done");
-  }
   
   // Speed command
   else if (cmd.startsWith("speed")) {
@@ -1448,84 +1362,38 @@ void updateGPS() {
 }
 
 // ============== NPK SENSOR FUNCTIONS ==============
+
 void updateNPKSensor() {
-  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) {
-    return;
-  }
-  
-  // Clear any existing bytes in buffer
-  while(npkSerial.available()) npkSerial.read();
-
-  // Switch RS485 to transmit mode
-  digitalWrite(NPK_DE_RE, HIGH);
-  delay(10); // Give transceiver time to switch to TX
-  
-  uint8_t query[8];
-  if (currentQueryStep == 0) {
-    memcpy(query, queryEnv, sizeof(queryEnv));
-  } else {
-    memcpy(query, queryNPK, sizeof(queryNPK));
-  }
-  npkSerial.write(query, 8);
-  npkSerial.flush(); // Wait until all bytes are transmitted
-  
-  // Important timing: wait exactly long enough for the final bit to finish
-  delay(3); 
-  
-  // Switch back to receive mode
-  digitalWrite(NPK_DE_RE, LOW);
-  
-  // Give the bus a moment to settle down before we start reading
-  delay(5);
-  
-  uint8_t frame[64];
-  size_t frameLen = 0;
-  bool ok = readModbusFrame(frame, sizeof(frame), &frameLen, 500);
-
-  if (ok && frameLen >= 7) {
-    if (currentQueryStep == 0 && frame[2] == 0x08 && frameLen >= 13) {
-      npkData.moisture = (((uint16_t)frame[3] << 8) | frame[4]) / 10.0;
-      npkData.temperature = (((uint16_t)frame[5] << 8) | frame[6]) / 10.0;
-      npkData.ec = ((uint16_t)frame[7] << 8) | frame[8];
-      npkData.ph = (((uint16_t)frame[9] << 8) | frame[10]) / 10.0;
-
-      currentQueryStep = 1;
-      npkLastUpdate = millis() - (NPK_UPDATE_INTERVAL_MS - 400);
-      return;
-    }
-
-    if (currentQueryStep == 1 && frame[2] == 0x06 && frameLen >= 11) {
-      Serial.print(F("🔍 RAW NPK FRAME: "));
-      for (size_t i = 0; i < frameLen; i++) {
-        Serial.print(frame[i], HEX);
-        Serial.print(" ");
-      }
-      Serial.println();
-
-      npkData.nitrogen = ((uint16_t)frame[3] << 8) | frame[4];
-      npkData.phosphorus = ((uint16_t)frame[5] << 8) | frame[6];
-      npkData.potassium = ((uint16_t)frame[7] << 8) | frame[8];
-
-      npkData.isValid = true;
-      npkData.lastReadTime = millis();
-      npkLastUpdate = millis();
-      currentQueryStep = 0;
-
-      Serial.print(F("🌱 NPK Data: N=")); Serial.print(npkData.nitrogen, 0);
-      Serial.print(F(" P=")); Serial.print(npkData.phosphorus, 0);
-      Serial.print(F(" K=")); Serial.print(npkData.potassium, 0);
-      Serial.print(F(" | Moist=")); Serial.print(npkData.moisture, 1);
-      Serial.print(F("% Temp=")); Serial.print(npkData.temperature, 1);
-      Serial.print(F("C EC=")); Serial.print(npkData.ec, 0);
-      Serial.print(F(" pH=")); Serial.println(npkData.ph, 1);
-      return;
-    }
-  }
-
-  Serial.println(F("⚠️ NPK Sensor Timeout/CRC/format error."));
-  npkData.isValid = false;
+  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) return;
   npkLastUpdate = millis();
-  currentQueryStep = 0;
+
+  uint8_t result = node.readHoldingRegisters(0x0000, 7);
+
+  if (result == node.ku8MBSuccess) {
+    // Scaling based on CWT manual
+    npkData.moisture     = node.getResponseBuffer(0) / 10.0;
+    npkData.temperature  = node.getResponseBuffer(1) / 10.0;
+    npkData.ec           = node.getResponseBuffer(2);
+    npkData.ph           = node.getResponseBuffer(3) / 10.0;
+    npkData.nitrogen     = node.getResponseBuffer(4);
+    npkData.phosphorus   = node.getResponseBuffer(5);
+    npkData.potassium    = node.getResponseBuffer(6);
+    npkData.lastReadTime = millis();
+    npkData.isValid      = true;
+
+    Serial.print("Moisture: "); Serial.print(npkData.moisture); Serial.print("% | ");
+    Serial.print("Temp: ");     Serial.print(npkData.temperature); Serial.print("C | ");
+    Serial.print("pH: ");       Serial.println(npkData.ph);
+    Serial.print("EC: ");       Serial.print((int)npkData.ec);  Serial.println(" us/cm");
+    Serial.print("NPK: ");      Serial.print((int)npkData.nitrogen); Serial.print("/");
+    Serial.print((int)npkData.phosphorus); Serial.print("/"); Serial.println((int)npkData.potassium);
+    Serial.println("--------------------------------------------");
+  } else {
+    npkData.isValid = false;
+    Serial.print("Error: ");
+    if (result == 0xE2) Serial.println("Timeout - Check 12V Power & A/B wires");
+    else Serial.println(result, HEX);
+  }
 }
 
 // ============== SYSTEM FUNCTIONS ==============

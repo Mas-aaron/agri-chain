@@ -12,7 +12,9 @@
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <TinyGPS++.h>  // GPS library
-#include <ModbusMaster.h>
+
+#include <Wire.h>
+#include <Adafruit_VL53L0X.h>
 
 #include <ESP32Servo.h>  // Servo library for soil sampling
 
@@ -23,24 +25,17 @@
 #define D2 21  // Motor 2 control A
 #define D3 22  // Motor 2 control B
 
-// ============== PWM / LEDC CONFIG ==============
-// ESP32 Arduino core v3.x pin-based LEDC API
-#define MOTOR_PWM_FREQ  1000  // 1 kHz – good for DC motors
-#define MOTOR_PWM_RES   8     // 8-bit resolution → duty 0-255
-
 // Optional Features
 #define LED_BUILTIN 2
 #define BATTERY_PIN 34  // ADC pin for battery monitoring (optional)
 
-// GPS Module Pins (Serial1 UART)
-#define GPS_RX 13  // RX pin for GPS module
-#define GPS_TX 14  // TX pin for GPS module
+// GPS Module Pins (Serial2 UART)
+#define GPS_RX 16  // RX pin for GPS module
+#define GPS_TX 17  // TX pin for GPS module
 #define GPS_BAUD 9600  // Standard GPS module baud rate
 
-// NPK Sensor Pins (Serial2 UART) - no DE/RE, matches working sketch
-#define NPK_RX 16  // RO/RXD on adapter
-#define NPK_TX 17  // DI/TXD on adapter
-#define NPK_BAUD 4800  // NPK sensor baud rate
+#define LIDAR_SDA 32
+#define LIDAR_SCL 33
 
 // ============== WIFI CONFIGURATION ==============
 const char* ssid = "ESP32_Rover";
@@ -57,9 +52,21 @@ const char* staPassword = "student2018";  // replace with your STA WiFi password
 BluetoothSerial SerialBT;
 const char* btName = "ESP32_Rover_BT";
 
+void btCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param) {
+  if (event == ESP_SPP_INIT_EVT) {
+    Serial.println(F("Bluetooth SPP init"));
+  } else if (event == ESP_SPP_START_EVT) {
+    Serial.println(F("Bluetooth SPP start"));
+  } else if (event == ESP_SPP_SRV_OPEN_EVT) {
+    Serial.println(F("Bluetooth client connected"));
+  } else if (event == ESP_SPP_CLOSE_EVT) {
+    Serial.println(F("Bluetooth client disconnected"));
+  }
+}
+
 // ============== GPS CONFIGURATION ==============
 TinyGPSPlus gps;
-HardwareSerial gpsSerial(1);  // Serial1 for GPS module
+HardwareSerial gpsSerial(2);  // Serial2 for GPS module
 
 // GPS Data variables
 struct {
@@ -81,29 +88,17 @@ struct {
 unsigned long gpsLastByteTime = 0;
 unsigned long gpsLastHeartbeatTime = 0;
 
-// ============== NPK SENSOR CONFIGURATION ==============
-HardwareSerial npkSerial(2); // Serial2 for NPK sensor
-ModbusMaster node;
+Adafruit_VL53L0X vl53l0x;
 
 struct {
-  float moisture = 0.0;
-  float temperature = 0.0;
-  float ec = 0.0;
-  float ph = 0.0;
-  float nitrogen = 0.0;
-  float phosphorus = 0.0;
-  float potassium = 0.0;
+  uint16_t distanceMm = 0;
   unsigned long lastReadTime = 0;
   bool isValid = false;
-} npkData;
+} lidarData;
 
-unsigned long npkLastUpdate = 0;
-const unsigned long NPK_UPDATE_INTERVAL_MS = 15000; // Read sensor every 15s (Modbus blocks ~2s on timeout)
-
-// ============== COMMAND PRIORITY ==============
-// How long after stopping to still hold off the blocking NPK read
-const unsigned long POST_STOP_HOLD_MS = 3000;  // 3 seconds after stop
-unsigned long lastStopTime = 0;                // Timestamp of last stopMotors() call
+unsigned long lidarLastUpdate = 0;
+const unsigned long LIDAR_UPDATE_INTERVAL_MS = 100;
+const uint16_t LIDAR_OBSTACLE_THRESHOLD_MM = 250;
 
 // ============== SOIL SAMPLING ==============
 Servo servo1;  // Sampling arm servo
@@ -152,7 +147,7 @@ double navigationTolerance = 10.0;  // meters
 WebServer server(80);
 
 // ============== AGRICHAIN BACKEND ==============
-const char* agrichainBaseUrl = "http://159.138.116.91:8000";
+const char* agrichainBaseUrl = "http://101.44.10.153:8000";
 const char* roverDeviceId = "rover-01";
 unsigned long lastBackendPost = 0;
 const unsigned long BACKEND_POST_INTERVAL_MS = 10000;  // Send GPS every 10 seconds
@@ -192,12 +187,6 @@ const unsigned long STATUS_UPDATE_INTERVAL = 500; // 0.5 second
 String btCommand = "";
 String lastCommandSource = "none";
 
-// ============== BLUETOOTH STATE ==============
-bool btConnected = false;
-bool btNeedsRestart = false;
-unsigned long btDisconnectTime = 0;
-const unsigned long BT_RESTART_DELAY_MS = 500; // Wait 500ms after disconnect before restarting stack
-
 // ============== SETUP ==============
 void setup() {
   Serial.begin(115200);
@@ -208,7 +197,7 @@ void setup() {
   // Initialize all systems
   initPins();
   initGPS();
-  initNPKSensor();
+  initLidar();
   initServos();
   initBluetooth();
   initWiFi();
@@ -218,31 +207,28 @@ void setup() {
   stopMotors();
   
   printSystemInfo();
-
-  // Start web server AFTER all other inits
-  initWebServer();
 }
 
 void initPins() {
   Serial.print(F("Initializing pins..."));
   
-  // Motor control – configure LEDC PWM (ESP32 core v3.x pin-based API)
-  ledcAttach(D0, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-  ledcAttach(D1, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-  ledcAttach(D2, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-  ledcAttach(D3, MOTOR_PWM_FREQ, MOTOR_PWM_RES);
-
+  // Motor control pins
+  pinMode(D0, OUTPUT);
+  pinMode(D1, OUTPUT);
+  pinMode(D2, OUTPUT);
+  pinMode(D3, OUTPUT);
+  
   // Status LED
   pinMode(LED_BUILTIN, OUTPUT);
-
+  
   // Battery monitoring (optional)
   pinMode(BATTERY_PIN, INPUT);
-
-  // Set initial states – all motors off
-  ledcWrite(D0, 0);
-  ledcWrite(D1, 0);
-  ledcWrite(D2, 0);
-  ledcWrite(D3, 0);
+  
+  // Set initial states
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, LOW);
+  digitalWrite(D2, LOW);
+  digitalWrite(D3, LOW);
   digitalWrite(LED_BUILTIN, LOW);
   
   Serial.println(F(" ✓"));
@@ -256,17 +242,17 @@ void initGPS() {
   Serial.println(F("  └─ Listening for satellite data..."));
 }
 
-void initNPKSensor() {
-  Serial.print(F("Initializing NPK Sensor..."));
-  
-  npkSerial.begin(NPK_BAUD, SERIAL_8N1, NPK_RX, NPK_TX);
-  node.begin(1, npkSerial); // Slave ID is 1
-  
-  Serial.println(F(" ✓"));
-  Serial.print(F("  └─ Baud Rate: "));
-  Serial.println(NPK_BAUD);
-  Serial.println(F("  └─ Pins: RX=16 TX=17 (no DE/RE)"));
-  Serial.println(F("  └─ Sensor: CWT 7-in-1 ModbusMaster"));
+void initLidar() {
+  Serial.print(F("Initializing VL53L0X..."));
+  Wire.begin(LIDAR_SDA, LIDAR_SCL);
+  bool ok = vl53l0x.begin(0x29, &Wire);
+  if (ok) {
+    Serial.println(F(" ✓"));
+    lidarData.isValid = true;
+  } else {
+    Serial.println(F(" ✗"));
+    lidarData.isValid = false;
+  }
 }
 
 void initServos() {
@@ -321,24 +307,16 @@ void initMQTT() {
   mqttClient.setCallback(mqttCallback);
 }
 
-unsigned long lastMqttReconnect = 0;
-const unsigned long MQTT_RECONNECT_COOLDOWN = 10000; // 10s between reconnect attempts
-
 void handleMQTT() {
   if (strlen(mqttHost) == 0) return;
   if (WiFi.status() != WL_CONNECTED) return;
 
   if (!mqttClient.connected()) {
-    // Only attempt reconnect every 10s to avoid blocking the loop
-    if (millis() - lastMqttReconnect >= MQTT_RECONNECT_COOLDOWN) {
-      lastMqttReconnect = millis();
-      ensureMqttConnected();
-    }
-    return;  // Don't try to publish if not connected
+    ensureMqttConnected();
   }
   mqttClient.loop();
 
-  if (gpsData.isValid) {
+  if (gpsData.isValid && mqttClient.connected()) {
     if (millis() - lastMqttPublish >= MQTT_PUBLISH_INTERVAL_MS) {
       publishGpsTelemetry();
       lastMqttPublish = millis();
@@ -374,17 +352,6 @@ void publishGpsTelemetry() {
   props["course"] = gpsData.course;
   props["sat"] = gpsData.satellites;
   props["hdop"] = gpsData.hdop;
-  
-  // Attach NPK data if valid
-  if (npkData.isValid) {
-    props["nitrogen"] = npkData.nitrogen;
-    props["phosphorus"] = npkData.phosphorus;
-    props["potassium"] = npkData.potassium;
-    props["moisture"] = npkData.moisture;
-    props["temperature"] = npkData.temperature;
-    props["ec"] = npkData.ec;
-    props["ph"] = npkData.ph;
-  }
 
   char payload[512];
   size_t n = serializeJson(doc, payload, sizeof(payload));
@@ -397,17 +364,8 @@ void publishGpsTelemetry() {
 // ============== AGRICHAIN BACKEND HTTP POST ==============
 void postSensorDataToBackend() {
   if (WiFi.status() != WL_CONNECTED) return;
-
-  bool isForced = (lastBackendPost == 0);
-  
-  // Normal 10-second interval posts require GPS lock. Forced posts don't skip if no GPS.
-  if (!isForced) {
-    if (!gpsData.isValid) return;
-    if (millis() - lastBackendPost < BACKEND_POST_INTERVAL_MS) return;
-  }
-
-  // Skip the POST if the rover is actively moving – avoid blocking the loop
-  if (isMoving) return;
+  if (!gpsData.isValid) return;
+  if (millis() - lastBackendPost < BACKEND_POST_INTERVAL_MS) return;
 
   lastBackendPost = millis();
 
@@ -415,7 +373,7 @@ void postSensorDataToBackend() {
   String url = String(agrichainBaseUrl) + "/sensor-data";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(800);  // Tight timeout – drop packet rather than stall loop
+  http.setTimeout(5000);
 
   // Build JSON payload
   StaticJsonDocument<384> doc;
@@ -427,17 +385,6 @@ void postSensorDataToBackend() {
   doc["course"] = gpsData.course;
   doc["satellites"] = gpsData.satellites;
   doc["hdop"] = gpsData.hdop;
-  
-  // Add NPK fields if sensor has valid reading
-  if (npkData.isValid) {
-    doc["nitrogen"] = npkData.nitrogen;
-    doc["phosphorus"] = npkData.phosphorus;
-    doc["potassium"] = npkData.potassium;
-    doc["temperature"] = npkData.temperature;
-    doc["humidity"] = npkData.moisture; // Map moisture to humidity for backend
-    doc["ph"] = npkData.ph;
-    doc["ec"] = npkData.ec;
-  }
 
   char payload[512];
   serializeJson(doc, payload, sizeof(payload));
@@ -555,27 +502,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-// Bluetooth event callback – fires on connect/disconnect
-void btEventCallback(esp_spp_cb_event_t event, esp_spp_cb_param_t* param) {
-  if (event == ESP_SPP_SRV_OPEN_EVT) {
-    // Phone connected
-    btConnected = true;
-    btNeedsRestart = false;
-    Serial.println(F("📱 BT: Phone connected"));
-  } else if (event == ESP_SPP_CLOSE_EVT) {
-    // Phone disconnected – schedule a BT restart so device becomes discoverable again
-    btConnected = false;
-    btNeedsRestart = true;
-    btDisconnectTime = millis();
-    btCommand = "";  // Clear any partial command
-    Serial.println(F("📵 BT: Phone disconnected – will restart BT"));
-  }
-}
-
 void initBluetooth() {
   Serial.print(F("Starting Bluetooth..."));
-  SerialBT.register_callback(btEventCallback);
-  SerialBT.begin(btName);
+  SerialBT.register_callback(btCallback);
+  bool ok = SerialBT.begin(btName);
+  if (!ok) {
+    Serial.println(F(" ✗"));
+    lastError = "Bluetooth init failed";
+    return;
+  }
   Serial.println(F(" ✓"));
   Serial.print(F("  └─ Device: "));
   Serial.println(btName);
@@ -592,7 +527,7 @@ void initWebServer() {
   // Status endpoints
   server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/api/info", HTTP_GET, handleInfo);
-  server.on("/api/npk", HTTP_GET, handleNPKData);
+  server.on("/api/lidar", HTTP_GET, handleLidarData);
   
   // Movement endpoints (full words)
   server.on("/api/forward", HTTP_GET, handleForward);
@@ -644,31 +579,31 @@ void initWebServer() {
 
 // ============== MAIN LOOP ==============
 void loop() {
-  // ── PRIORITY 1: Handle incoming commands first (zero-delay path) ──
-  handleBluetooth();          // Read Bluetooth commands
-  server.handleClient();      // Handle WiFi web requests
-
-  // ── PRIORITY 2: Non-blocking sensors (always safe) ──
-  updateGPS();                // Just drains the UART buffer, never blocks
-  runHeartbeat();             // LED blink
-  updateSystemStatus();       // Safety auto-stop check
-
-  // ── PRIORITY 3: Background network I/O — only when rover is fully idle ──
-  bool roverIdle = !isMoving && (millis() - lastStopTime >= POST_STOP_HOLD_MS);
-
-  if (roverIdle) {
-    // NPK is NOT read here — it is on-demand only (via 'npk' BT cmd or /api/npk)
-    handleMQTT();               // MQTT publish
-    postSensorDataToBackend();  // HTTP POST
-  } else {
-    if (mqttClient.connected()) mqttClient.loop();
+  handleBluetooth();          // Handle Bluetooth commands
+  updateGPS();                // Read GPS data
+  updateLidar();              // Read lidar sensor
+  handleObstacleAvoidance();  // Auto-stop if obstacle detected
+  handleMQTT();               // Huawei IoT MQTT
+  postSensorDataToBackend();  // AgriChain backend HTTP POST
+  updateSystemStatus();       // Update system status
+  runHeartbeat();             // LED indicator
+  
+  // Handle soil sampling if in progress
+  if (isSampling) {
+    executeSoilSampling();
   }
-
-  // ── PRIORITY 4: Autonomous tasks ──
-  if (isSampling)                        executeSoilSampling();
-  if (isRecording && gpsData.isValid)    recordPathWaypoint();
-  if (isNavigating)                      executeAutonomousNavigation();
-  // No delay() — loop runs as fast as possible
+  
+  // Handle path recording
+  if (isRecording && gpsData.isValid) {
+    recordPathWaypoint();
+  }
+  
+  // Handle autonomous navigation
+  if (isNavigating) {
+    executeAutonomousNavigation();
+  }
+  
+  delay(10);  // Small delay for stability
 }
 
 // ============== WEB INTERFACE ==============
@@ -694,6 +629,15 @@ void handleStatus() {
   server.send(200, "application/json", response);
 }
 
+void handleLidarData() {
+  String response = "{";
+  response += "\"distance_mm\":" + String(lidarData.distanceMm) + ",";
+  response += "\"timestamp\":" + String((unsigned long)millis()) + ",";
+  response += "\"is_valid\":" + String(lidarData.isValid ? "true" : "false");
+  response += "}";
+  server.send(200, "application/json", response);
+}
+
 void handleInfo() {
   StaticJsonDocument<1024> doc;
   
@@ -710,7 +654,6 @@ void handleInfo() {
   JsonArray endpoints = doc.createNestedArray("endpoints");
   endpoints.add("GET /api/status");
   endpoints.add("GET /api/info");
-  endpoints.add("GET /api/npk");
   endpoints.add("GET /api/gps/data");
   endpoints.add("GET /api/forward");
   endpoints.add("GET /api/backward");
@@ -799,40 +742,6 @@ void handleGPS() {
   } else {
     Serial.println(F(" ✗ → NO FIX (searching)"));
   }
-}
-
-void handleNPKData() {
-  // Do a live Modbus read on request (only when rover is idle to avoid blocking movement)
-  if (!isMoving) {
-    uint8_t result = node.readHoldingRegisters(0x0000, 7);
-    if (result == node.ku8MBSuccess) {
-      npkData.moisture     = node.getResponseBuffer(0) / 10.0;
-      npkData.temperature  = node.getResponseBuffer(1) / 10.0;
-      npkData.ec           = node.getResponseBuffer(2);
-      npkData.ph           = node.getResponseBuffer(3) / 10.0;
-      npkData.nitrogen     = node.getResponseBuffer(4);
-      npkData.phosphorus   = node.getResponseBuffer(5);
-      npkData.potassium    = node.getResponseBuffer(6);
-      npkData.lastReadTime = millis();
-      npkData.isValid      = true;
-    } else {
-      npkData.isValid = false;
-    }
-  }
-
-  String response = "{";
-  response += "\"moisture\":"    + String(npkData.moisture, 1)    + ",";
-  response += "\"temperature\":" + String(npkData.temperature, 1) + ",";
-  response += "\"ec\":"          + String(npkData.ec, 0)          + ",";
-  response += "\"ph\":"          + String(npkData.ph, 1)          + ",";
-  response += "\"nitrogen\":"    + String(npkData.nitrogen, 0)    + ",";
-  response += "\"phosphorus\":"  + String(npkData.phosphorus, 0)  + ",";
-  response += "\"potassium\":"   + String(npkData.potassium, 0)   + ",";
-  response += "\"timestamp\":"   + String((unsigned long)millis()) + ",";
-  response += "\"is_valid\":"    + String(npkData.isValid ? "true" : "false");
-  response += "}";
-
-  server.send(200, "application/json", response);
 }
 
 void handleSoilSample() {
@@ -1010,42 +919,18 @@ void handleNavigationStatus() {
 }
 
 // ============== BLUETOOTH HANDLING ==============
-// Full BT stack restart after disconnect.
-// end()+begin() resets the controller to advertising mode so the phone
-// can reconnect immediately. The device MAC and name stay the same, so
-// Android keeps it in the paired list — no "forget device" needed.
-void restartBluetooth() {
-  Serial.println(F("BT: Restarting stack for reconnect..."));
-  stopMotors();                      // Safety: stop motors before BT restart
-  SerialBT.end();                    // Shut down BT stack fully
-  delay(500);                        // Let stack settle
-  SerialBT.register_callback(btEventCallback);
-  SerialBT.begin(btName);            // Bring stack back up — now advertising
-  btConnected = false;
-  btNeedsRestart = false;
-  btCommand = "";
-  Serial.println(F("BT: Ready — waiting for connection"));
-}
-
 void handleBluetooth() {
-  // Handle pending BT restart after disconnect (with small delay to let stack settle)
-  if (btNeedsRestart && (millis() - btDisconnectTime >= BT_RESTART_DELAY_MS)) {
-    restartBluetooth();
-    return;
-  }
-
-  // Drain the ENTIRE available buffer per call (not just 1 byte)
-  // so a full command like "forward\n" is assembled in one loop iteration
-  while (SerialBT.available()) {
-    char c = SerialBT.read();
-    if (c == '\n' || c == '\r') {
-      if (btCommand.length() > 0) {
-        processBluetoothCommand(btCommand);
-        btCommand = "";
-      }
-    } else if (btCommand.length() < 32) {  // Guard against overlong garbage
-      btCommand += c;
+  if (!SerialBT.available()) return;
+  
+  char c = SerialBT.read();
+  
+  if (c == '\n' || c == '\r') {
+    if (btCommand.length() > 0) {
+      processBluetoothCommand(btCommand);
+      btCommand = "";
     }
+  } else {
+    btCommand += c;
   }
 }
 
@@ -1092,41 +977,19 @@ void processBluetoothCommand(String cmd) {
   else if (cmd == "gps") {
     sendBluetoothGPS();
   }
+  else if (cmd == "lidar") {
+    SerialBT.print("Distance(mm): ");
+    SerialBT.print(lidarData.distanceMm);
+    SerialBT.print(" Valid: ");
+    SerialBT.println(lidarData.isValid ? "YES" : "NO");
+  }
   else if (cmd == "sample") {
     if (isSampling) {
-      SerialBT.println("\u274c Sampling already in progress");
+      SerialBT.println("❌ Sampling already in progress");
     } else {
       isSampling = true;
       samplingStartTime = millis();
-      SerialBT.println("\u2713 Soil sampling started");
-    }
-  }
-
-  // On-demand NPK sensor read
-  else if (cmd == "npk") {
-    SerialBT.println(">> Reading NPK sensor...");
-    uint8_t result = node.readHoldingRegisters(0x0000, 7);
-    if (result == node.ku8MBSuccess) {
-      npkData.moisture     = node.getResponseBuffer(0) / 10.0;
-      npkData.temperature  = node.getResponseBuffer(1) / 10.0;
-      npkData.ec           = node.getResponseBuffer(2);
-      npkData.ph           = node.getResponseBuffer(3) / 10.0;
-      npkData.nitrogen     = node.getResponseBuffer(4);
-      npkData.phosphorus   = node.getResponseBuffer(5);
-      npkData.potassium    = node.getResponseBuffer(6);
-      npkData.lastReadTime = millis();
-      npkData.isValid      = true;
-      SerialBT.print("Moisture: ");    SerialBT.print(npkData.moisture);    SerialBT.println(" %");
-      SerialBT.print("Temp:     ");    SerialBT.print(npkData.temperature); SerialBT.println(" C");
-      SerialBT.print("pH:       ");    SerialBT.println(npkData.ph);
-      SerialBT.print("EC:       ");    SerialBT.print((int)npkData.ec);     SerialBT.println(" us/cm");
-      SerialBT.print("N/P/K:    ");
-      SerialBT.print((int)npkData.nitrogen); SerialBT.print("/");
-      SerialBT.print((int)npkData.phosphorus); SerialBT.print("/");
-      SerialBT.println((int)npkData.potassium);
-    } else {
-      npkData.isValid = false;
-      SerialBT.println("ERROR: NPK Timeout - Check 12V Power & A/B wires");
+      SerialBT.println("✓ Soil sampling started");
     }
   }
   
@@ -1264,83 +1127,113 @@ void executeCommand(String command, String source) {
 }
 
 // ============== MOTOR CONTROL FUNCTIONS ==============
-// Helper: write PWM duty to a motor pin (ESP32 core v3.x pin-based API)
-void motorWrite(uint8_t pin, int duty) {
-  ledcWrite(pin, constrain(duty, 0, 255));
-}
-
 void forward() {
   currentDirection = "forward";
   isMoving = true;
-  // Motor 1 forward: A=speed, B=0
-  motorWrite(D0, motorSpeed); motorWrite(D1, 0);
-  // Motor 2 forward: A=speed, B=0
-  motorWrite(D2, motorSpeed); motorWrite(D3, 0);
-  Serial.print(F("  ▶ FORWARD  speed=")); Serial.println(motorSpeed);
+  
+  // Motor 1 forward: D0=HIGH, D1=LOW
+  digitalWrite(D0, HIGH);
+  digitalWrite(D1, LOW);
+  
+  // Motor 2 forward: D2=HIGH, D3=LOW
+  digitalWrite(D2, HIGH);
+  digitalWrite(D3, LOW);
+  
+  Serial.println(F("  ▶ FORWARD"));
 }
 
 void backward() {
   currentDirection = "backward";
   isMoving = true;
-  // Motor 1 backward: A=0, B=speed
-  motorWrite(D0, 0); motorWrite(D1, motorSpeed);
-  // Motor 2 backward: A=0, B=speed
-  motorWrite(D2, 0); motorWrite(D3, motorSpeed);
-  Serial.print(F("  ◀ BACKWARD speed=")); Serial.println(motorSpeed);
+  
+  // Motor 1 backward: D0=LOW, D1=HIGH
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, HIGH);
+  
+  // Motor 2 backward: D2=LOW, D3=HIGH
+  digitalWrite(D2, LOW);
+  digitalWrite(D3, HIGH);
+  
+  Serial.println(F("  ◀ BACKWARD"));
 }
 
 void turnLeft() {
   currentDirection = "left";
   isMoving = true;
-  // Left motor stopped, right motor forward
-  motorWrite(D0, 0);          motorWrite(D1, 0);
-  motorWrite(D2, motorSpeed); motorWrite(D3, 0);
-  Serial.print(F("  ↰ TURN LEFT speed=")); Serial.println(motorSpeed);
+  
+  // Left turn: stop left motor, run right motor forward
+  digitalWrite(D0, LOW);  // Motor 1 stop
+  digitalWrite(D1, LOW);
+  
+  digitalWrite(D2, HIGH); // Motor 2 forward
+  digitalWrite(D3, LOW);
+  
+  Serial.println(F("  ↰ TURN LEFT"));
 }
 
 void turnRight() {
   currentDirection = "right";
   isMoving = true;
-  // Left motor forward, right motor stopped
-  motorWrite(D0, motorSpeed); motorWrite(D1, 0);
-  motorWrite(D2, 0);          motorWrite(D3, 0);
-  Serial.print(F("  ↱ TURN RIGHT speed=")); Serial.println(motorSpeed);
+  
+  // Right turn: run left motor forward, stop right motor
+  digitalWrite(D0, HIGH); // Motor 1 forward
+  digitalWrite(D1, LOW);
+  
+  digitalWrite(D2, LOW);  // Motor 2 stop
+  digitalWrite(D3, LOW);
+  
+  Serial.println(F("  ↱ TURN RIGHT"));
 }
 
 void rotateLeft() {
   currentDirection = "rotate-left";
   isMoving = true;
-  // Left backward, right forward
-  motorWrite(D0, 0);          motorWrite(D1, motorSpeed);
-  motorWrite(D2, motorSpeed); motorWrite(D3, 0);
-  Serial.print(F("  ↺ ROTATE LEFT speed=")); Serial.println(motorSpeed);
+  
+  // Rotate left: left backward, right forward
+  digitalWrite(D0, LOW);  // Motor 1 backward
+  digitalWrite(D1, HIGH);
+  
+  digitalWrite(D2, HIGH); // Motor 2 forward
+  digitalWrite(D3, LOW);
+  
+  Serial.println(F("  ↺ ROTATE LEFT"));
 }
 
 void rotateRight() {
   currentDirection = "rotate-right";
   isMoving = true;
-  // Left forward, right backward
-  motorWrite(D0, motorSpeed); motorWrite(D1, 0);
-  motorWrite(D2, 0);          motorWrite(D3, motorSpeed);
-  Serial.print(F("  ↻ ROTATE RIGHT speed=")); Serial.println(motorSpeed);
+  
+  // Rotate right: left forward, right backward
+  digitalWrite(D0, HIGH); // Motor 1 forward
+  digitalWrite(D1, LOW);
+  
+  digitalWrite(D2, LOW);  // Motor 2 backward
+  digitalWrite(D3, HIGH);
+  
+  Serial.println(F("  ↻ ROTATE RIGHT"));
 }
 
 void stopMotors() {
   currentDirection = "none";
   isMoving = false;
-  lastStopTime = millis();  // Start the post-stop cooldown timer
-  motorWrite(D0, 0); motorWrite(D1, 0);
-  motorWrite(D2, 0); motorWrite(D3, 0);
+  
+  // All motors stop
+  digitalWrite(D0, LOW);
+  digitalWrite(D1, LOW);
+  digitalWrite(D2, LOW);
+  digitalWrite(D3, LOW);
+  
   Serial.println(F("  ⏹ STOP"));
 }
 
 void setSpeed(int speed) {
   motorSpeed = constrain(speed, 0, 255);
-  Serial.print(F("⚡ Speed set to: "));
+  Serial.print(F("⚡ Speed: "));
   Serial.println(motorSpeed);
-  // If already moving, re-apply speed immediately
-  if (isMoving) {
-    executeCommand(currentCommand, lastCommandSource);
+  
+  if (motorSpeed > 0 && motorSpeed < 255) {
+    Serial.println(F("   Note: Your driver uses fixed speed"));
+    Serial.println(F("   Speed setting is for compatibility only"));
   }
 }
 
@@ -1433,38 +1326,36 @@ void updateGPS() {
   }
 }
 
-// ============== NPK SENSOR FUNCTIONS ==============
+void updateLidar() {
+  if (!lidarData.isValid) return;
+  if (millis() - lidarLastUpdate < LIDAR_UPDATE_INTERVAL_MS) return;
+  lidarLastUpdate = millis();
 
-void updateNPKSensor() {
-  if (millis() - npkLastUpdate < NPK_UPDATE_INTERVAL_MS) return;
-  npkLastUpdate = millis();
+  VL53L0X_RangingMeasurementData_t measure;
+  vl53l0x.rangingTest(&measure, false);
 
-  uint8_t result = node.readHoldingRegisters(0x0000, 7);
+  if (measure.RangeStatus == 4) {
+    lidarData.isValid = false;
+    return;
+  }
 
-  if (result == node.ku8MBSuccess) {
-    // Scaling based on CWT manual
-    npkData.moisture     = node.getResponseBuffer(0) / 10.0;
-    npkData.temperature  = node.getResponseBuffer(1) / 10.0;
-    npkData.ec           = node.getResponseBuffer(2);
-    npkData.ph           = node.getResponseBuffer(3) / 10.0;
-    npkData.nitrogen     = node.getResponseBuffer(4);
-    npkData.phosphorus   = node.getResponseBuffer(5);
-    npkData.potassium    = node.getResponseBuffer(6);
-    npkData.lastReadTime = millis();
-    npkData.isValid      = true;
+  lidarData.distanceMm = (uint16_t)measure.RangeMilliMeter;
+  lidarData.lastReadTime = millis();
+  lidarData.isValid = true;
+}
 
-    Serial.print("Moisture: "); Serial.print(npkData.moisture); Serial.print("% | ");
-    Serial.print("Temp: ");     Serial.print(npkData.temperature); Serial.print("C | ");
-    Serial.print("pH: ");       Serial.println(npkData.ph);
-    Serial.print("EC: ");       Serial.print((int)npkData.ec);  Serial.println(" us/cm");
-    Serial.print("NPK: ");      Serial.print((int)npkData.nitrogen); Serial.print("/");
-    Serial.print((int)npkData.phosphorus); Serial.print("/"); Serial.println((int)npkData.potassium);
-    Serial.println("--------------------------------------------");
-  } else {
-    npkData.isValid = false;
-    Serial.print("Error: ");
-    if (result == 0xE2) Serial.println("Timeout - Check 12V Power & A/B wires");
-    else Serial.println(result, HEX);
+void handleObstacleAvoidance() {
+  if (!isMoving) return;
+  if (!lidarData.isValid) return;
+  if (lidarData.distanceMm == 0) return;
+
+  if (lidarData.distanceMm <= LIDAR_OBSTACLE_THRESHOLD_MM) {
+    stopMotors();
+    isNavigating = false;
+    lastError = "Obstacle detected";
+    Serial.print(F("🛑 Obstacle detected @"));
+    Serial.print(lidarData.distanceMm);
+    Serial.println(F("mm"));
   }
 }
 
@@ -1533,52 +1424,6 @@ void executeSoilSampling() {
     stepStartTime = millis();
   }
   else if (samplingStep == 2 && millis() - stepStartTime > 3000) {  // Wait 3 seconds
-    Serial.println(F("  >> Reading Soil Data 3 times..."));
-    
-    float sumMoisture = 0, sumTemp = 0, sumPh = 0;
-    int sumEc = 0, sumN = 0, sumP = 0, sumK = 0;
-    int successCount = 0;
-
-    for (int i = 0; i < 3; i++) {
-      uint8_t result = node.readHoldingRegisters(0x0000, 7);
-      if (result == node.ku8MBSuccess) {
-        sumMoisture += node.getResponseBuffer(0) / 10.0;
-        sumTemp     += node.getResponseBuffer(1) / 10.0;
-        sumEc       += node.getResponseBuffer(2);
-        sumPh       += node.getResponseBuffer(3) / 10.0;
-        sumN        += node.getResponseBuffer(4);
-        sumP        += node.getResponseBuffer(5);
-        sumK        += node.getResponseBuffer(6);
-        successCount++;
-        Serial.print(F("    -> Sample ")); Serial.print(i + 1); Serial.println(F(" OK"));
-      } else {
-        Serial.print(F("    -> Sample ")); Serial.print(i + 1); Serial.print(F(" FAIL (")); Serial.print(result, HEX); Serial.println(F(")"));
-      }
-      delay(500); // 500ms between reads
-    }
-
-    if (successCount > 0) {
-      npkData.moisture     = sumMoisture / successCount;
-      npkData.temperature  = sumTemp / successCount;
-      npkData.ec           = sumEc / successCount;
-      npkData.ph           = sumPh / successCount;
-      npkData.nitrogen     = sumN / successCount;
-      npkData.phosphorus   = sumP / successCount;
-      npkData.potassium    = sumK / successCount;
-      npkData.lastReadTime = millis();
-      npkData.isValid      = true;
-      Serial.print(F("  >> ✅ Averaged NPK: "));
-      Serial.print((int)npkData.nitrogen); Serial.print(F("/"));
-      Serial.print((int)npkData.phosphorus); Serial.print(F("/"));
-      Serial.println((int)npkData.potassium);
-      
-      // Force POST to backend immediately on the next loop iteration (ignoring the 10-second timer)
-      lastBackendPost = 0; 
-    } else {
-      npkData.isValid = false;
-      Serial.println(F("  >> ❌ Error reading NPK sensor."));
-    }
-
     servo2.write(SAMPLE_ANGLE_MIN);
     Serial.println(F("  Step 3/4: Servo2 → 0° (Bucket retracted)"));
     samplingStep = 3;

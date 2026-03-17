@@ -1,152 +1,90 @@
 """
-Huawei Cloud SMS Service for AgriChain.
+Twilio SMS & WhatsApp Service for AgriChain.
 
-Sends SMS notifications to farmers via Huawei Cloud Message & SMS API.
-Uses X-WSSE authentication as per Huawei docs:
-https://support.huaweicloud.com/intl/en-us/devg-msgsms/sms_04_0004.html
-
+Sends notifications to farmers via Twilio.
 Environment variables:
-  HUAWEI_SMS_API_URL      – API endpoint (default: ap-southeast-1)
-  HUAWEI_SMS_APP_KEY      – Application Key from SMS console
-  HUAWEI_SMS_APP_SECRET   – Application Secret from SMS console
-  HUAWEI_SMS_SENDER       – Channel/sender number
-  HUAWEI_SMS_TEMPLATE_ID  – Default template ID for notifications
-
-All SMS sending is fire-and-forget: errors are logged but never block
-the main business logic.
+  TWILIO_ACCOUNT_SID  - Twilio Account SID
+  TWILIO_AUTH_TOKEN   - Twilio Auth Token
+  TWILIO_PHONE_NUMBER - Your Twilio Sender Number (e.g. +1234567890)
+  TWILIO_WHATSAPP_NUMBER - (Optional) Twilio WhatsApp Sender Number (e.g. +1234567890)
 """
 from __future__ import annotations
 
-import hashlib
-import base64
-import json
 import logging
 import os
-import time
-import uuid
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-import httpx
+# The twilio package must be installed (pip install twilio)
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 
 logger = logging.getLogger("agrichain.sms")
 
-
-# ── Configuration (read lazily so Docker env_file is loaded first) ──────
-def _get_sms_config() -> Dict[str, str]:
+def _get_twilio_config() -> Dict[str, str]:
     return {
-        "api_url": os.getenv(
-            "HUAWEI_SMS_API_URL",
-            "https://smsapi.ap-southeast-1.myhuaweicloud.com:443/sms/batchSendSms/v1",
-        ).strip(),
-        "app_key": os.getenv("HUAWEI_SMS_APP_KEY", "").strip(),
-        "app_secret": os.getenv("HUAWEI_SMS_APP_SECRET", "").strip(),
-        "sender": os.getenv("HUAWEI_SMS_SENDER", "").strip(),
-        "template_id": os.getenv("HUAWEI_SMS_TEMPLATE_ID", "").strip(),
+        "account_sid": os.getenv("TWILIO_ACCOUNT_SID", "").strip(),
+        "auth_token": os.getenv("TWILIO_AUTH_TOKEN", "").strip(),
+        "phone_number": os.getenv("TWILIO_PHONE_NUMBER", "").strip(),
+        "whatsapp_number": os.getenv("TWILIO_WHATSAPP_NUMBER", "").strip(),
     }
 
-
-def _is_configured() -> bool:
-    """Return True if all required SMS credentials are set."""
-    cfg = _get_sms_config()
-    return bool(cfg["app_key"] and cfg["app_secret"] and cfg["sender"])
-
-
-# ── X-WSSE Authentication ────────────────────────────────────────────
-def _build_wsse_header(app_key: str, app_secret: str) -> str:
-    """
-    Build the X-WSSE header value as per Huawei Cloud SMS specification.
-    UsernameToken with SHA-256 PasswordDigest.
-    """
-    now = time.strftime("%Y-%m-%dT%H:%M:%SZ")
-    nonce = uuid.uuid4().hex
-    digest = hashlib.sha256((nonce + now + app_secret).encode()).hexdigest()
-    digest_b64 = base64.b64encode(digest.encode()).decode()
-    return (
-        f'UsernameToken Username="{app_key}",'
-        f'PasswordDigest="{digest_b64}",'
-        f'Nonce="{nonce}",'
-        f'Created="{now}"'
-    )
-
-
-# ── Core send function ───────────────────────────────────────────────
-async def send_sms(
+async def send_twilio_message(
     phone: str,
-    template_params: List[str],
-    template_id: Optional[str] = None,
+    message: str,
+    use_whatsapp: bool = False
 ) -> Dict[str, str]:
     """
-    Send an SMS via Huawei Cloud Message & SMS API.
-
-    Args:
-        phone: Recipient number in global format, e.g. "+256700123456".
-        template_params: List of template variable values, e.g. ["FH-abc123", "John"].
-        template_id: Override the default template ID. If None, uses env var.
-
-    Returns:
-        dict with "status" ("sent", "skipped", or "error") and optional details.
+    Send an SMS or WhatsApp message via Twilio.
     """
     if not phone or not phone.strip():
-        logger.debug("SMS skipped — no phone number provided")
+        logger.debug("Twilio skipped \u2014 no phone number provided")
         return {"status": "skipped", "reason": "no_phone"}
 
-    cfg = _get_sms_config()
+    cfg = _get_twilio_config()
 
-    if not cfg["app_key"] or not cfg["app_secret"]:
-        logger.warning("SMS skipped — HUAWEI_SMS_APP_KEY / APP_SECRET not configured")
+    if not cfg["account_sid"] or not cfg["auth_token"]:
+        logger.warning("Twilio skipped \u2014 TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not configured")
         return {"status": "skipped", "reason": "not_configured"}
 
-    if not cfg["sender"]:
-        logger.warning("SMS skipped — HUAWEI_SMS_SENDER not configured")
+    # Format the sender and recipient for WhatsApp if requested
+    if use_whatsapp:
+        sender = cfg.get("whatsapp_number")
+        if not sender:
+            # Fall back to standard SMS if WhatsApp isn't configured
+            sender = cfg["phone_number"]
+            to_phone = phone
+        else:
+            sender = f"whatsapp:{sender}"
+            to_phone = f"whatsapp:{phone}"
+    else:
+        sender = cfg["phone_number"]
+        to_phone = phone
+
+    if not sender:
+        logger.warning("Twilio skipped \u2014 TWILIO_PHONE_NUMBER not configured")
         return {"status": "skipped", "reason": "no_sender"}
 
-    tid = template_id or cfg["template_id"]
-    if not tid:
-        logger.warning("SMS skipped — no template_id provided or configured")
-        return {"status": "skipped", "reason": "no_template"}
-
-    # Build headers
-    headers = {
-        "Authorization": 'WSSE realm="SDP",profile="UsernameToken",type="Appkey"',
-        "X-WSSE": _build_wsse_header(cfg["app_key"], cfg["app_secret"]),
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-
-    # Build form body
-    form_data = {
-        "from": cfg["sender"],
-        "to": phone.strip(),
-        "templateId": tid,
-        "templateParas": json.dumps(template_params, ensure_ascii=False),
-        "statusCallback": "",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=15, verify=False) as client:
-            resp = await client.post(cfg["api_url"], data=form_data, headers=headers)
+        # Twilio's Python SDK is synchronous, but we can call it in this async wrapper
+        # For a high-load production environment, you'd wrap this in run_in_executor.
+        client = Client(cfg["account_sid"], cfg["auth_token"])
+        
+        msg = client.messages.create(
+            body=message,
+            from_=sender,
+            to=to_phone
+        )
+        logger.info(f"\u2705 Twilio message sent successfully to {to_phone}. SID: {msg.sid}")
+        return {"status": "sent", "sid": msg.sid}
 
-        body = resp.text
-        logger.info(f"SMS to {phone}: status={resp.status_code}, body={body[:200]}")
-
-        if resp.status_code == 200:
-            resp_data = resp.json() if resp.text else {}
-            code = resp_data.get("code", "")
-            if code == "000000":
-                logger.info(f"✅ SMS sent successfully to {phone}")
-                return {"status": "sent", "code": code}
-            else:
-                logger.warning(f"SMS API returned code={code}: {resp_data.get('description', '')}")
-                return {"status": "error", "code": code, "detail": resp_data.get("description", "")}
-        else:
-            logger.warning(f"SMS API HTTP error: {resp.status_code}")
-            return {"status": "error", "http_status": str(resp.status_code), "detail": body[:200]}
-
+    except TwilioRestException as e:
+        logger.error(f"Twilio API error for {to_phone}: {e}")
+        return {"status": "error", "detail": str(e)}
     except Exception as e:
-        logger.error(f"SMS send failed for {phone}: {e}")
+        logger.error(f"Twilio send failed for {to_phone}: {e}")
         return {"status": "error", "detail": str(e)}
 
-
-# ── Convenience wrappers for AgriChain events ─────────────────────────
+# \u2500\u2500 Convenience wrappers for AgriChain events \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
 async def notify_contract_purchased(
     farmer_phone: str,
@@ -157,10 +95,12 @@ async def notify_contract_purchased(
     currency: str,
 ) -> Dict[str, str]:
     """Notify farmer that their contract has been purchased."""
-    params = [contract_id, crop, buyer_name, f"{total:,.0f}", currency]
-    logger.info(f"Sending contract-purchased SMS to {farmer_phone} for {contract_id}")
-    return await send_sms(farmer_phone, template_params=params)
-
+    message = (
+        f"AgriChain Alert: Amazing news! Your {crop} contract ({contract_id}) "
+        f"has just been purchased by {buyer_name} for {currency} {total:,.0f}."
+    )
+    logger.info(f"Sending contract-purchased Twilio msg to {farmer_phone} for {contract_id}")
+    return await send_twilio_message(farmer_phone, message=message, use_whatsapp=True)
 
 async def notify_token_traded(
     farmer_phone: str,
@@ -170,10 +110,12 @@ async def notify_token_traded(
     trade_type: str,
 ) -> Dict[str, str]:
     """Notify farmer that their tokens have been traded."""
-    params = [asset_id, f"{amount:,.2f}", trade_type, trade_id]
-    logger.info(f"Sending token-trade SMS to {farmer_phone} for {asset_id}")
-    return await send_sms(farmer_phone, template_params=params)
-
+    message = (
+        f"AgriChain Alert: Your asset {asset_id} had a {trade_type} trade "
+        f"(ID: {trade_id}) for an amount of {amount:,.2f}."
+    )
+    logger.info(f"Sending token-trade Twilio msg to {farmer_phone} for {asset_id}")
+    return await send_twilio_message(farmer_phone, message=message, use_whatsapp=True)
 
 async def notify_payment_completed(
     farmer_phone: str,
@@ -182,10 +124,13 @@ async def notify_payment_completed(
     reference: str,
 ) -> Dict[str, str]:
     """Notify farmer that payment has been completed."""
-    params = [contract_id, amount, reference]
-    logger.info(f"Sending payment-completed SMS to {farmer_phone} for {contract_id}")
-    return await send_sms(farmer_phone, template_params=params)
-
+    message = (
+        f"AgriChain Alert: Payment for contract {contract_id} is complete! "
+        f"Amount: {amount}. Reference: {reference}."
+    )
+    logger.info(f"Sending payment-completed Twilio msg to {farmer_phone} for {contract_id}")
+    # SMS fallback example (use_whatsapp=False)
+    return await send_twilio_message(farmer_phone, message=message, use_whatsapp=False)
 
 async def notify_payout_initiated(
     farmer_phone: str,
@@ -194,6 +139,9 @@ async def notify_payout_initiated(
     currency: str,
 ) -> Dict[str, str]:
     """Notify farmer that their payout has been initiated after verification."""
-    params = [contract_id, amount, currency]
-    logger.info(f"Sending payout-initiated SMS to {farmer_phone} for {contract_id}")
-    return await send_sms(farmer_phone, template_params=params)
+    message = (
+        f"AgriChain Alert: Your payout of {currency} {amount} for "
+        f"contract {contract_id} has been initiated and is on the way!"
+    )
+    logger.info(f"Sending payout-initiated Twilio msg to {farmer_phone} for {contract_id}")
+    return await send_twilio_message(farmer_phone, message=message, use_whatsapp=True)

@@ -30,7 +30,8 @@
 // GPS Module Pins (Serial1 UART)
 #define GPS_RX 13  // RX pin for GPS module
 #define GPS_TX 14  // TX pin for GPS module
-#define GPS_BAUD 9600  // Standard GPS module baud rate
+#define GPS_BAUD_DEFAULT 9600  // Standard GPS module baud rate
+int gpsBaud = GPS_BAUD_DEFAULT;  // Current GPS baud rate (can be changed)
 
 // NPK Sensor Pins (Serial2 UART) - no DE/RE, matches working sketch
 #define NPK_RX 16  // RO/RXD on adapter
@@ -79,6 +80,8 @@ unsigned long gpsLastHeartbeatTime = 0;
 // ============== NPK SENSOR CONFIGURATION ==============
 HardwareSerial npkSerial(2); // Serial2 for NPK sensor
 ModbusMaster node;
+
+bool enableNPK = true;
 
 struct {
   float moisture = 0.0;
@@ -231,10 +234,22 @@ void initPins() {
 
 void initGPS() {
   Serial.print(F("Initializing GPS module..."));
-  gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_RX, GPS_TX);
+  gpsSerial.begin(gpsBaud, SERIAL_8N1, GPS_RX, GPS_TX);
   Serial.println(F(" ✓"));
-  Serial.println(F("  └─ Baud Rate: 9600"));
+  Serial.print(F("  └─ Baud Rate: "));
+  Serial.println(gpsBaud);
+  Serial.println(F("  └─ Pins: RX=13 TX=14"));
   Serial.println(F("  └─ Listening for satellite data..."));
+  
+  // Test GPS serial communication
+  Serial.println(F("  └─ Testing GPS serial..."));
+  delay(1000);
+  if (gpsSerial.available()) {
+    Serial.println(F("  └─ GPS serial data detected! ✓"));
+  } else {
+    Serial.println(F("  └─ No GPS serial data detected! ✗"));
+    Serial.println(F("  └─ Check wiring: GPS TX→GPIO13, GPS RX→GPIO14, Power, Ground"));
+  }
 }
 
 void initNPKSensor() {
@@ -600,9 +615,14 @@ void initWebServer() {
 void loop() {
   handleBluetooth();          // Handle Bluetooth commands
   updateGPS();                // Read GPS data
-  updateNPKSensor();          // Read NPK soil sensor
+  if (enableNPK) {
+    updateNPKSensor();          // Read NPK soil sensor
+  }
+  updateGPS();                // Keep parsing GPS while other tasks run
   handleMQTT();               // Huawei IoT MQTT
+  updateGPS();                // Keep parsing GPS while other tasks run
   postSensorDataToBackend();  // AgriChain backend HTTP POST
+  updateGPS();                // Keep parsing GPS while other tasks run
   updateSystemStatus();       // Update system status
   runHeartbeat();             // LED indicator
   
@@ -1003,6 +1023,17 @@ void processBluetoothCommand(String cmd) {
   else if (cmd == "gps") {
     sendBluetoothGPS();
   }
+  else if (cmd == "gps-test") {
+    testGPSBaudRates();
+  }
+  else if (cmd == "npk-off") {
+    enableNPK = false;
+    SerialBT.println("✓ NPK polling disabled");
+  }
+  else if (cmd == "npk-on") {
+    enableNPK = true;
+    SerialBT.println("✓ NPK polling enabled");
+  }
   else if (cmd == "sample") {
     if (isSampling) {
       SerialBT.println("❌ Sampling already in progress");
@@ -1054,6 +1085,9 @@ void sendBluetoothHelp() {
   SerialBT.println("\nSYSTEM:");
   SerialBT.println("  status          - Show system status");
   SerialBT.println("  gps             - Show GPS data");
+  SerialBT.println("  gps-test        - Test GPS baud rates");
+  SerialBT.println("  npk-off         - Disable NPK polling (helps GPS debugging)");
+  SerialBT.println("  npk-on          - Enable NPK polling");
   SerialBT.println("  sample          - Sample soil");
   SerialBT.println("  info            - Show system info");
   SerialBT.println("  speed[0-255]    - Set speed (e.g., speed180)");
@@ -1258,6 +1292,52 @@ void setSpeed(int speed) {
 }
 
 // ============== GPS FUNCTIONS ==============
+void testGPSBaudRates() {
+  Serial.println(F("\n🔍 Testing GPS baud rates..."));
+  
+  int baudRates[] = {4800, 9600, 19200, 38400, 57600, 115200};
+  int numRates = sizeof(baudRates) / sizeof(baudRates[0]);
+  
+  for (int i = 0; i < numRates; i++) {
+    Serial.print(F("  Testing "));
+    Serial.print(baudRates[i]);
+    Serial.print(F(" baud... "));
+    
+    gpsSerial.end();
+    delay(100);
+    gpsSerial.begin(baudRates[i], SERIAL_8N1, GPS_RX, GPS_TX);
+    delay(1000);  // Wait for data
+    
+    int bytesAvailable = gpsSerial.available();
+    if (bytesAvailable > 0) {
+      Serial.print(F("✓ Data detected ("));
+      Serial.print(bytesAvailable);
+      Serial.println(F(" bytes)"));
+      
+      // Show first few bytes as hex
+      Serial.print(F("    Raw data: "));
+      for (int j = 0; j < min(10, bytesAvailable); j++) {
+        char c = gpsSerial.read();
+        Serial.print("0x");
+        Serial.print(c, HEX);
+        Serial.print(" ");
+      }
+      Serial.println();
+      
+      // Keep this baud rate and return
+      gpsBaud = baudRates[i];
+      Serial.print(F("  ✅ Using GPS baud rate: "));
+      Serial.println(gpsBaud);
+      return;
+    } else {
+      Serial.println(F("✗ No data"));
+    }
+  }
+  
+  Serial.println(F("  ❌ No GPS data found on any baud rate"));
+  Serial.println(F("  📋 Check wiring and power connections"));
+}
+
 void updateGPS() {
   // Read available GPS data
   bool readAnyByte = false;

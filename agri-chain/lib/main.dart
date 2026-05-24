@@ -7,11 +7,13 @@ import 'package:agri_chain/providers/alerts_provider.dart';
 import 'package:agri_chain/providers/fields_provider.dart';
 import 'package:agri_chain/providers/locale_provider.dart';
 import 'package:agri_chain/features/blockchain/providers/blockchain_provider.dart';
+import 'package:agri_chain/features/logistics/providers/logistics_provider.dart';
 import 'package:agri_chain/firebase_bootstrap.dart';
 import 'package:agri_chain/rover/providers/rover_provider.dart';
 import 'package:agri_chain/services/auth_service.dart';
 import 'package:agri_chain/services/recommendation_service.dart';
 import 'package:agri_chain/providers/verifier_provider.dart';
+import 'package:agri_chain/features/logistics/providers/logistics_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,9 +38,11 @@ void main() async {
         ChangeNotifierProvider(create: (_) => FieldsProvider()),
         ChangeNotifierProvider(create: (_) => AlertsProvider()),
         ChangeNotifierProvider(create: (_) => BlockchainProvider()),
+        ChangeNotifierProvider(create: (_) => LogisticsProvider()),
         ChangeNotifierProvider(create: (_) => RoverProvider()),
         ChangeNotifierProvider(create: (_) => VerifierProvider()),
         ChangeNotifierProvider(create: (_) => LocaleProvider()),
+        ChangeNotifierProvider(create: (_) => LogisticsProvider()),
       ],
       child: const MaizeDetectorApp(),
     ),

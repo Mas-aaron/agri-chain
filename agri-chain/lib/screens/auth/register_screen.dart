@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:agri_chain/services/auth_service.dart';
 import 'package:agri_chain/providers/verifier_provider.dart';
 import 'package:agri_chain/screens/verifier/verifier_dashboard.dart';
+import 'package:agri_chain/features/logistics/providers/logistics_provider.dart';
+import 'package:agri_chain/features/logistics/screens/job_board_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -16,11 +19,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _passCtl = TextEditingController();
   final _confirmCtl = TextEditingController();
   final _orgNameCtl = TextEditingController();
+  final _companyNameCtl = TextEditingController();
+  final _phoneCtl = TextEditingController();
   bool _isLoading = false;
   String? _error;
   String _selectedRole = 'Farmer';
 
-  static const _roles = ['Farmer', 'Verifier'];
+  static const _roles = ['Farmer', 'Verifier', 'Logistics Company'];
 
   Future<void> _register() async {
     setState(() {
@@ -45,6 +50,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         throw Exception('Organization name is required for verifiers.');
       }
 
+      if (_selectedRole == 'Logistics Company' && _companyNameCtl.text.trim().isEmpty) {
+        throw Exception('Company name is required for logistics accounts.');
+      }
+
       await context.read<AuthService>().registerWithEmail(email, pass);
 
       if (_selectedRole == 'Verifier') {
@@ -63,6 +72,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
             MaterialPageRoute(builder: (_) => const VerifierDashboard()),
           );
         }
+      } else if (_selectedRole == 'Logistics Company') {
+        // Save logistics role locally so AuthWrapper can route correctly on next login
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user_role_$email', 'logistics');
+        await prefs.setString('logistics_company_$email', _companyNameCtl.text.trim());
+        if (_phoneCtl.text.trim().isNotEmpty) {
+          await prefs.setString('logistics_phone_$email', _phoneCtl.text.trim());
+        }
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const JobBoardScreen()),
+        );
       } else {
         // Default farmer flow — pop and let AuthWrapper redirect
         await Future.delayed(const Duration(milliseconds: 100));
@@ -119,8 +141,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       decoration: InputDecoration(
                         labelText: 'I am a...',
                         prefixIcon: Icon(
-                          _selectedRole == 'Verifier' ? Icons.verified_user : Icons.agriculture,
-                          color: _selectedRole == 'Verifier' ? Colors.deepPurple : scheme.primary,
+                          _selectedRole == 'Verifier'
+                              ? Icons.verified_user
+                              : _selectedRole == 'Logistics Company'
+                                  ? Icons.local_shipping
+                                  : Icons.agriculture,
+                          color: _selectedRole == 'Verifier'
+                              ? Colors.deepPurple
+                              : _selectedRole == 'Logistics Company'
+                                  ? Colors.orange.shade700
+                                  : scheme.primary,
                         ),
                       ),
                       items: _roles
@@ -137,6 +167,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         decoration: const InputDecoration(
                           labelText: 'Organization Name',
                           prefixIcon: Icon(Icons.business),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // ── Logistics-specific fields ────────────────
+                    if (_selectedRole == 'Logistics Company') ...[
+                      TextField(
+                        controller: _companyNameCtl,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Company Name *',
+                          hintText: 'e.g. Kampala Freight Ltd',
+                          prefixIcon: Icon(Icons.business_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _phoneCtl,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'Contact Phone (optional)',
+                          hintText: '+256 700 000 000',
+                          prefixIcon: Icon(Icons.phone_outlined),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -167,12 +221,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         onPressed: _isLoading ? null : _register,
                         style: _selectedRole == 'Verifier'
                             ? FilledButton.styleFrom(backgroundColor: Colors.deepPurple)
-                            : null,
-                        child: _isLoading 
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                            : _selectedRole == 'Logistics Company'
+                                ? FilledButton.styleFrom(backgroundColor: Colors.orange.shade700)
+                                : null,
+                        child: _isLoading
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : Text(_selectedRole == 'Verifier'
                                 ? 'Create Verifier Account'
-                                : 'Create Account'),
+                                : _selectedRole == 'Logistics Company'
+                                    ? 'Create Logistics Account'
+                                    : 'Create Account'),
                       ),
                     ),
                   ],

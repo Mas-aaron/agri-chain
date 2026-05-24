@@ -107,6 +107,69 @@ func (d *DB) Migrate(ctx context.Context) error {
 			meta_json TEXT NOT NULL
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_ledger_contract_id ON ledger_events (contract_id);`,
+
+		// ── Logistics Aggregation Module ──────────────────────────────────────
+		// aggregated_jobs must be created before transport_requests (FK dependency)
+		`CREATE TABLE IF NOT EXISTS aggregated_jobs (
+			id                 TEXT PRIMARY KEY,
+			destination_market TEXT NOT NULL,
+			origin_region      TEXT NOT NULL,
+			total_quantity_kg  REAL NOT NULL,
+			farmer_count       INTEGER NOT NULL,
+			status             TEXT NOT NULL DEFAULT 'OPEN',
+			route_json         TEXT,
+			centroid_lat       REAL,
+			centroid_lng       REAL,
+			created_at         TEXT NOT NULL,
+			updated_at         TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS transport_requests (
+			id               TEXT PRIMARY KEY,
+			farmer_uid       TEXT NOT NULL,
+			farmer_name      TEXT NOT NULL,
+			farmer_phone     TEXT,
+			pickup_lat       REAL NOT NULL,
+			pickup_lng       REAL NOT NULL,
+			pickup_parish    TEXT NOT NULL,
+			pickup_subcounty TEXT,
+			destination_market TEXT NOT NULL,
+			crop_type        TEXT NOT NULL,
+			quantity_kg      REAL NOT NULL CHECK(quantity_kg > 0),
+			harvest_ready_at TEXT,
+			farmer_notes     TEXT,
+			status           TEXT NOT NULL DEFAULT 'PENDING',
+			job_id           TEXT,
+			created_at       TEXT NOT NULL,
+			updated_at       TEXT NOT NULL,
+			FOREIGN KEY(farmer_uid) REFERENCES users(uid) ON DELETE CASCADE,
+			FOREIGN KEY(job_id) REFERENCES aggregated_jobs(id) ON DELETE SET NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS job_requests (
+			job_id     TEXT NOT NULL,
+			request_id TEXT NOT NULL,
+			added_at   TEXT NOT NULL,
+			PRIMARY KEY (job_id, request_id),
+			FOREIGN KEY(job_id) REFERENCES aggregated_jobs(id) ON DELETE CASCADE,
+			FOREIGN KEY(request_id) REFERENCES transport_requests(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS job_assignments (
+			id               TEXT PRIMARY KEY,
+			job_id           TEXT NOT NULL,
+			company_id       TEXT NOT NULL,
+			driver_phone     TEXT NOT NULL,
+			truck_capacity_kg REAL NOT NULL,
+			planned_pickup_at TEXT,
+			accepted_at      TEXT NOT NULL,
+			status           TEXT NOT NULL DEFAULT 'ACTIVE',
+			FOREIGN KEY(job_id) REFERENCES aggregated_jobs(id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_transport_requests_status      ON transport_requests(status);`,
+		`CREATE INDEX IF NOT EXISTS idx_transport_requests_destination  ON transport_requests(destination_market);`,
+		`CREATE INDEX IF NOT EXISTS idx_transport_requests_farmer       ON transport_requests(farmer_uid);`,
+		`CREATE INDEX IF NOT EXISTS idx_transport_requests_job          ON transport_requests(job_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_aggregated_jobs_status          ON aggregated_jobs(status);`,
+		`CREATE INDEX IF NOT EXISTS idx_aggregated_jobs_destination     ON aggregated_jobs(destination_market);`,
+		`CREATE INDEX IF NOT EXISTS idx_job_requests_request            ON job_requests(request_id);`,
 	}
 
 	tx, err := d.sql.BeginTx(ctx, nil)

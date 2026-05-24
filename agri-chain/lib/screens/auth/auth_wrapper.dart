@@ -2,10 +2,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:agri_chain/services/verifier_api_service.dart';
 import 'package:agri_chain/providers/verifier_provider.dart';
 import 'package:agri_chain/models/verifier_models.dart';
 import 'package:agri_chain/screens/verifier/verifier_dashboard.dart';
+import 'package:agri_chain/features/logistics/screens/job_board_screen.dart';
+import 'package:agri_chain/features/logistics/providers/logistics_provider.dart';
 
 class AuthWrapper extends StatelessWidget {
   final Widget authenticatedChild;
@@ -64,8 +67,8 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 
-/// Checks the backend to see if the authenticated user is a verifier.
-/// If yes, routes to VerifierDashboard; otherwise, to the farmer AppShell.
+/// Checks the backend to see if the authenticated user is a verifier or
+/// logistics company. Routes accordingly; defaults to the farmer AppShell.
 class _RoleRouter extends StatefulWidget {
   final User user;
   final Widget farmerChild;
@@ -77,26 +80,51 @@ class _RoleRouter extends StatefulWidget {
 }
 
 class _RoleRouterState extends State<_RoleRouter> {
-  late Future<Map<String, dynamic>?> _lookupFuture;
+  late Future<_UserRole> _roleFuture;
 
   @override
   void initState() {
     super.initState();
-    _lookupFuture = VerifierApiService().lookupByUserId(widget.user.uid);
+    _roleFuture = _resolveRole(widget.user);
   }
 
   @override
   void didUpdateWidget(covariant _RoleRouter oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user.uid != widget.user.uid) {
-      _lookupFuture = VerifierApiService().lookupByUserId(widget.user.uid);
+      _roleFuture = _resolveRole(widget.user);
     }
+  }
+
+  /// Resolves the user's role by checking:
+  /// 1. SharedPreferences for a saved 'logistics' role (set at registration)
+  /// 2. The verifier API
+  /// 3. Defaults to farmer
+  Future<_UserRole> _resolveRole(User user) async {
+    // Check for logistics role saved at registration time
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final email = user.email ?? '';
+      final savedRole = prefs.getString('user_role_$email') ??
+          prefs.getString('user_role_${user.uid}');
+      if (savedRole == 'logistics') {
+        return _UserRole.logistics;
+      }
+    } catch (_) {}
+
+    // Check verifier API
+    try {
+      final verifierData = await VerifierApiService().lookupByUserId(user.uid);
+      if (verifierData != null) return _UserRole.verifier;
+    } catch (_) {}
+
+    return _UserRole.farmer;
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: _lookupFuture,
+    return FutureBuilder<_UserRole>(
+      future: _roleFuture,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -113,23 +141,39 @@ class _RoleRouterState extends State<_RoleRouter> {
           );
         }
 
-        final verifierData = snap.data;
-        if (verifierData != null) {
-          // User is a verifier — hydrate the provider and show verifier dashboard
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!context.mounted) return;
-            final prov = context.read<VerifierProvider>();
-            if (prov.verifier == null || prov.verifier!.userId != widget.user.uid) {
-              prov.verifier = Verifier.fromJson(verifierData);
-              prov.loadDashboardData();
-            }
-          });
-          return const VerifierDashboard();
-        }
+        final role = snap.data ?? _UserRole.farmer;
 
-        // User is a farmer — show normal app
-        return widget.farmerChild;
+        switch (role) {
+          case _UserRole.verifier:
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!context.mounted) return;
+              final prov = context.read<VerifierProvider>();
+              if (prov.verifier == null || prov.verifier!.userId != widget.user.uid) {
+                // Re-fetch verifier data to hydrate the provider
+                VerifierApiService().lookupByUserId(widget.user.uid).then((data) {
+                  if (data != null && context.mounted) {
+                    prov.verifier = Verifier.fromJson(data);
+                    prov.loadDashboardData();
+                  }
+                });
+              }
+            });
+            return const VerifierDashboard();
+
+          case _UserRole.logistics:
+            // Ensure LogisticsProvider is initialised
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!context.mounted) return;
+              context.read<LogisticsProvider>().loadJobs(status: 'OPEN');
+            });
+            return const JobBoardScreen();
+
+          case _UserRole.farmer:
+            return widget.farmerChild;
+        }
       },
     );
   }
 }
+
+enum _UserRole { farmer, verifier, logistics }

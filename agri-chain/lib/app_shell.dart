@@ -12,7 +12,11 @@ import 'package:agri_chain/screens/blockchain/ledger_screen.dart';
 import 'package:agri_chain/screens/blockchain/token_marketplace_screen.dart';
 import 'package:agri_chain/screens/blockchain/blockchain_hub_screen.dart';
 import 'package:agri_chain/screens/blockchain/loans_screen.dart';
+import 'package:agri_chain/features/logistics/screens/transport_request_screen.dart';
+import 'package:agri_chain/features/logistics/screens/job_board_screen.dart';
 import 'package:agri_chain/l10n/app_strings.dart';
+import 'package:agri_chain/features/logistics/screens/transport_request_screen.dart';
+import 'package:agri_chain/features/logistics/screens/job_board_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -25,15 +29,27 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
 
   List<_NavItem> _navItems(AppStrings s) => [
+    // 0
     _NavItem(icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: s.navDashboard),
+    // 1
     _NavItem(icon: Icons.auto_graph_outlined, selectedIcon: Icons.auto_graph, label: s.navYieldForecast),
+    // 2
     _NavItem(icon: Icons.token_outlined, selectedIcon: Icons.token, label: s.navTokenMarket),
+    // 3
     _NavItem(icon: Icons.storefront_outlined, selectedIcon: Icons.storefront, label: s.navContracts),
+    // 4
     _NavItem(icon: Icons.receipt_long_outlined, selectedIcon: Icons.receipt_long, label: s.navLedger),
+    // 5
     _NavItem(icon: Icons.account_balance_outlined, selectedIcon: Icons.account_balance, label: s.navLoans),
+    // 6
+    _NavItem(icon: Icons.local_shipping_outlined, selectedIcon: Icons.local_shipping, label: 'Logistics'),
+    // 7
     _NavItem(icon: Icons.camera_alt_outlined, selectedIcon: Icons.camera_alt, label: s.navDiseaseScan),
+    // 8
     _NavItem(icon: Icons.map_outlined, selectedIcon: Icons.map, label: s.navFields),
+    // 9
     _NavItem(icon: Icons.notifications_outlined, selectedIcon: Icons.notifications, label: s.navAlerts),
+    // 10
     _NavItem(icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: s.navSettings),
   ];
 
@@ -52,12 +68,14 @@ class _AppShellState extends State<AppShell> {
       case 5:
         return LoansScreen(onNavigateToMarketplace: () => setState(() => _index = 2));
       case 6:
-        return const HomeScreen(embedded: true);
+        return const TransportRequestScreen();
       case 7:
-        return const FieldMapScreen();
+        return const HomeScreen(embedded: true);
       case 8:
-        return const AlertsTab();
+        return const FieldMapScreen();
       case 9:
+        return const AlertsTab();
+      case 10:
         return const SettingsTab();
       default:
         return const DashboardTab();
@@ -81,7 +99,7 @@ class _AppShellState extends State<AppShell> {
     }
 
     // Mobile layout — bottom nav with 4 key tabs
-    const mobileIndices = [0, 2, 6, 9]; // Dashboard, Token Market, Scan, Settings
+    const mobileIndices = [0, 6, 7, 10]; // Dashboard, Logistics, Scan, Settings
     final mobileIndex = mobileIndices.indexOf(_index).clamp(0, 3);
 
     return Scaffold(

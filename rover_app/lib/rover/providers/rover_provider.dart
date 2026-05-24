@@ -184,9 +184,13 @@ class RoverProvider extends ChangeNotifier {
   Future<bool> connectBluetooth(BluetoothDevice device) async {
     if (_isConnecting) return false;
 
-    if (_isConnected) {
-      disconnect();
-    }
+    // Always run disconnect to aggressively clean up any stale 
+    // internal flutter_bluetooth_serial states / socket references.
+    disconnect();
+    
+    // Give the Android Bluetooth stack a moment to fully close previous sockets.
+    // This is the key to fixing "timeout" errors when reconnecting immediately.
+    await Future.delayed(const Duration(milliseconds: 1000));
 
     // Ensure permissions + adapter enabled before connecting (Android 12+).
     try {

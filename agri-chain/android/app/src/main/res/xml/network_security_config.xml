@@ -6,7 +6,7 @@
     -->
     <domain-config cleartextTrafficPermitted="true">
         <!-- AgriChain backend (Huawei ECS) -->
-        <domain includeSubdomains="true">101.44.10.153</domain>
+        <domain includeSubdomains="true">159.138.116.91</domain>
         <!-- PesaPal payment gateway -->
         <domain includeSubdomains="true">pesapal.com</domain>
         <domain includeSubdomains="true">pay.pesapal.com</domain>
